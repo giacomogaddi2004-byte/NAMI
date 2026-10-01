@@ -9,6 +9,7 @@ import { useData } from '../data/store'
 import { isSplit } from '../lib/balances'
 import { today } from '../lib/dates'
 import { formatEur, parseEur, TAX_PERCENT, taxShare } from '../lib/money'
+import { categoryFor, normalizeMerchant, sameMerchant } from '../lib/rules'
 
 const TYPES = [['uscita', 'Uscita'], ['entrata', 'Entrata'], ['giroconto', 'Giroconto']] as const
 const WHO = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name]] as const
@@ -53,13 +54,14 @@ export function Aggiungi() {
 
 function TxForm({ existing }: { existing?: Tx }) {
   const navigate = useNavigate()
-  const { accounts, me, saveTx, deleteTx } = useData()
+  const { accounts, txs, rules, me, saveTx, deleteTx, saveTxs, saveRule } = useData()
   const mine = accounts.find((a) => a.owner === me) ?? accounts[0]
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'uscita')
   const [amount, setAmount] = useState(existing ? formatEur(existing.cents).replace(' €', '') : '')
   const [merchant, setMerchant] = useState(existing?.merchant ?? '')
-  const [expenseCat, setExpenseCat] = useState<CategoryKey>(existing?.type === 'uscita' ? (existing.category ?? 'altro') : 'supermercato')
+  // Categoria scelta a mano per un'uscita; finché è null decide la regola dell'esercente.
+  const [expensePick, setExpensePick] = useState<CategoryKey | null>(existing?.type === 'uscita' && !existing.review ? (existing.category ?? 'altro') : null)
   const [incomeCat, setIncomeCat] = useState<CategoryKey>(existing?.type === 'entrata' ? (existing.category ?? 'altro') : 'lavoro')
   const [accountId, setAccountId] = useState(existing?.accountId ?? mine.id)
   const [toAccountId, setToAccountId] = useState(existing?.toAccountId ?? accounts.find((a) => a.id !== mine.id)?.id ?? mine.id)
@@ -76,8 +78,19 @@ function TxForm({ existing }: { existing?: Tx }) {
   const cents = parseEur(amount)
   const invoice = invoiceChoice ?? incomeCat === 'lavoro'
   const cats = isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
-  const picked = isIncome ? incomeCat : expenseCat
-  const pick = isIncome ? setIncomeCat : setExpenseCat
+  const suggested = categoryFor(merchant, rules)
+  const picked = isIncome ? incomeCat : (expensePick ?? suggested ?? 'altro')
+  const pick = isIncome ? setIncomeCat : setExpensePick
+  const shop = merchant.trim()
+  const hint = isIncome
+    ? 'Entrate variabili'
+    : expensePick
+      ? ''
+      : suggested
+        ? `Proposta per ${shop}`
+        : shop
+          ? 'Esercente nuovo: da controllare'
+          : ''
 
   const from = accounts.find((a) => a.id === accountId)
   const to = accounts.find((a) => a.id === toAccountId)
@@ -91,8 +104,9 @@ function TxForm({ existing }: { existing?: Tx }) {
     const sameQuota = (fromSplit ? who : null) === (toSplit ? toWho : null)
     if (isTransfer && accountId === toAccountId && sameQuota) return setError('Scegli due conti diversi.')
     setBusy(true)
+    const id = existing?.id ?? crypto.randomUUID()
     await saveTx({
-      id: existing?.id ?? crypto.randomUUID(),
+      id,
       type,
       cents,
       date,
@@ -104,8 +118,23 @@ function TxForm({ existing }: { existing?: Tx }) {
       who: fromSplit || !from || from.owner === 'entrambi' ? who : from.owner,
       toWho: toSplit ? toWho : undefined,
       invoice: isIncome ? invoice : undefined,
+      review: type === 'uscita' && !expensePick && !suggested ? true : undefined,
     })
+    await learnRule(id)
     navigate(-1)
+  }
+
+  /** Categoria cambiata a mano per un esercente: propone di ricordarla e di correggere il passato. */
+  const learnRule = async (savedId: string) => {
+    const changed = !existing || existing.review || existing.category !== expensePick || existing.merchant !== shop
+    if (type !== 'uscita' || !expensePick || !shop || suggested === expensePick || !changed) return
+    if (!window.confirm(`Usare sempre “${CAT[expensePick].name}” per ${shop}?`)) return
+    const pattern = normalizeMerchant(shop)
+    await saveRule({ id: rules.find((r) => r.pattern === pattern)?.id ?? crypto.randomUUID(), pattern, label: shop, category: expensePick })
+    const past = sameMerchant(txs, shop, expensePick, savedId)
+    if (past.length > 0 && window.confirm(`Correggere anche ${past.length === 1 ? 'il movimento passato' : `i ${past.length} movimenti passati`} di ${shop}?`)) {
+      await saveTxs(past.map((t) => ({ ...t, category: expensePick, review: undefined })))
+    }
   }
 
   const remove = async () => {
@@ -172,7 +201,7 @@ function TxForm({ existing }: { existing?: Tx }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="row-between">
             <div style={{ fontSize: 14, fontWeight: 700 }}>Categoria</div>
-            {isIncome && <div style={smallLabel}>Entrate variabili</div>}
+            <div style={{ ...smallLabel, color: !isIncome && !expensePick && !suggested ? '#8A4B00' : smallLabel.color }}>{hint}</div>
           </div>
           <div className="cat-grid">
             {cats.map((k) => {

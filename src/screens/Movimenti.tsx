@@ -8,11 +8,11 @@ import { useData } from '../data/store'
 import { dayTitle, today } from '../lib/dates'
 import { formatEur, formatSigned } from '../lib/money'
 
-const FILTERS = [['tutti', 'Tutti'], ['uscite', 'Uscite'], ['entrate', 'Entrate'], ['giroconti', 'Giroconti']] as const
-type Filter = (typeof FILTERS)[number][0]
+type Filter = 'tutti' | 'controllare' | 'uscite' | 'entrate' | 'giroconti'
 
 const KEEP: Record<Filter, (tx: Tx) => boolean> = {
   tutti: () => true,
+  controllare: (tx) => !!tx.review,
   uscite: (tx) => tx.type === 'uscita',
   entrate: (tx) => tx.type === 'entrata',
   giroconti: (tx) => tx.type === 'giroconto',
@@ -26,6 +26,15 @@ export function Movimenti() {
   const [filter, setFilter] = useState<Filter>('tutti')
   const [query, setQuery] = useState('')
   const now = today()
+  const toReview = txs.filter((tx) => tx.review).length
+  // Il filtro "Da controllare" compare solo quando c'è qualcosa da sistemare.
+  const filters: [Filter, string][] = [
+    ['tutti', 'Tutti'],
+    ...(toReview > 0 || filter === 'controllare' ? [['controllare', `Da controllare · ${toReview}`] as [Filter, string]] : []),
+    ['uscite', 'Uscite'],
+    ['entrate', 'Entrate'],
+    ['giroconti', 'Giroconti'],
+  ]
 
   const names = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts])
   const meta = (tx: Tx) => {
@@ -65,7 +74,7 @@ export function Movimenti() {
         />
       </div>
 
-      <Segmented options={FILTERS} value={filter} onChange={setFilter} className="chips" />
+      <Segmented options={filters} value={filter} onChange={setFilter} className="chips" />
 
       {groups.map((g) => (
         <div key={g.date} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

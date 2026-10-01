@@ -6,7 +6,7 @@ import { decryptJson, encryptJson } from '../lib/crypto'
 import { TAX_PERCENT, taxShare } from '../lib/money'
 import { errorMessage, supabase } from '../lib/supabase'
 import { db, PRIMARY_KEY, rowKey, TABLES, type OutboxItem, type Row, type TableName } from './db'
-import type { Account, PersonKey, Settings, Tx } from './model'
+import type { Account, PersonKey, Rule, Settings, Tx } from './model'
 
 const SYNC_EVERY_MS = 60_000
 const PAGE = 1000
@@ -24,17 +24,24 @@ interface Data {
   accounts: Account[]
   /** Movimenti dal più recente. */
   txs: Tx[]
+  /** Regole esercente → categoria della coppia. */
+  rules: Rule[]
   saveSettings: (settings: Settings) => Promise<void>
   saveAccounts: (accounts: Account[]) => Promise<void>
   /** Salva un movimento; per le entrate con fattura aggiorna anche il giroconto verso il conto tasse. */
   saveTx: (tx: Tx) => Promise<void>
   deleteTx: (id: string) => Promise<void>
+  /** Aggiorna più movimenti insieme (es. cambio di categoria), senza toccare i giroconti delle tasse. */
+  saveTxs: (list: Tx[]) => Promise<void>
+  saveRule: (rule: Rule) => Promise<void>
+  deleteRule: (rule: Rule) => Promise<void>
   syncNow: () => void
 }
 
 const Ctx = createContext<Data | null>(null)
 
 type AccountPayload = Omit<Account, 'id'>
+type RulePayload = Omit<Rule, 'id'>
 type TxPayload = Omit<Tx, 'id' | 'date' | 'accountId' | 'toAccountId' | 'createdBy'>
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -46,6 +53,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [txs, setTxs] = useState<Tx[]>([])
+  const [rules, setRules] = useState<Rule[]>([])
   const running = useRef(false)
   const again = useRef(false)
 
@@ -60,7 +68,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return null
       }
     }
-    const [accountRows, txRows, settingsRow] = await Promise.all([db.accounts.toArray(), db.transactions.toArray(), db.settings.get(householdId)])
+    const [accountRows, txRows, ruleRows, settingsRow] = await Promise.all([
+      db.accounts.toArray(),
+      db.transactions.toArray(),
+      db.rules.toArray(),
+      db.settings.get(householdId),
+    ])
 
     const nextAccounts: Account[] = []
     for (const row of accountRows) {
@@ -72,6 +85,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const p = row.deleted_at ? null : await open<TxPayload>('transactions', row)
       if (p) nextTxs.push({ ...p, id: row.id!, date: row.date!, accountId: row.account_id!, toAccountId: row.to_account_id ?? undefined, createdBy: row.created_by })
     }
+    const nextRules: Rule[] = []
+    for (const row of ruleRows) {
+      const p = row.deleted_at ? null : await open<RulePayload>('rules', row)
+      if (p) nextRules.push({ ...p, id: row.id! })
+    }
+    setRules(nextRules.sort((a, b) => a.label.localeCompare(b.label, 'it')))
     setAccounts(nextAccounts.sort((a, b) => a.order - b.order))
     setTxs(nextTxs.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)))
     setSettings(settingsRow ? await open<Settings>('settings', settingsRow) : null)
@@ -148,7 +167,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   /** Scrive in locale, mette in coda e prova subito a inviare. */
   const write = useCallback(
     async (items: OutboxItem[]) => {
-      await db.transaction('rw', [db.accounts, db.transactions, db.settings, db.outbox], async () => {
+      await db.transaction('rw', [db.accounts, db.transactions, db.settings, db.rules, db.outbox], async () => {
         for (const item of items) {
           await db.table<Row, string>(item.table).put(item.row)
           await db.outbox.add(item)
@@ -234,10 +253,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [txs, sealTx, write],
   )
 
+  const saveTxs = useCallback(async (list: Tx[]) => write(await Promise.all(list.map((t) => sealTx(t)))), [sealTx, write])
+
+  const saveRule = useCallback(
+    async ({ id, ...payload }: Rule) => write([await seal('rules', id, payload satisfies RulePayload)]),
+    [seal, write],
+  )
+
+  const deleteRule = useCallback(
+    async ({ id, ...payload }: Rule) => write([await seal('rules', id, payload, { deleted_at: new Date().toISOString() })]),
+    [seal, write],
+  )
+
   const me = (user && settings?.people[user.id]) || null
   const value = useMemo<Data>(
-    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, saveSettings, saveAccounts, saveTx, deleteTx, syncNow: sync }),
-    [loaded, synced, syncError, pending, me, settings, accounts, txs, saveSettings, saveAccounts, saveTx, deleteTx, sync],
+    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, rules, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, syncNow: sync }),
+    [loaded, synced, syncError, pending, me, settings, accounts, txs, rules, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, sync],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

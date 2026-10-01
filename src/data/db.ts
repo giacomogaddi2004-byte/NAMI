@@ -1,7 +1,7 @@
 // Copia locale dei dati (sempre cifrata) e coda delle modifiche da inviare.
 import Dexie, { type Table } from 'dexie'
 
-export type TableName = 'accounts' | 'transactions' | 'settings'
+export type TableName = 'accounts' | 'transactions' | 'settings' | 'rules'
 
 /** Una riga così come sta sul server: il contenuto vero è in `payload`, cifrato. */
 export interface Row {
@@ -27,6 +27,7 @@ export const PRIMARY_KEY: Record<TableName, 'id' | 'household_id'> = {
   accounts: 'id',
   transactions: 'id',
   settings: 'household_id',
+  rules: 'id',
 }
 export const TABLES = Object.keys(PRIMARY_KEY) as TableName[]
 
@@ -36,6 +37,7 @@ export const db = new Dexie('nami-data') as Dexie & {
   accounts: Table<Row, string>
   transactions: Table<Row, string>
   settings: Table<Row, string>
+  rules: Table<Row, string>
   outbox: Table<OutboxItem, number>
   meta: Table<{ key: string; value: string }, string>
 }
@@ -47,8 +49,9 @@ db.version(1).stores({
   outbox: '++seq',
   meta: 'key',
 })
+db.version(2).stores({ rules: 'id' })
 
 /** Cancella la copia locale (all'uscita dall'account). */
 export async function clearLocalData(): Promise<void> {
-  await Promise.all([db.accounts.clear(), db.transactions.clear(), db.settings.clear(), db.outbox.clear(), db.meta.clear()])
+  await Promise.all([db.accounts.clear(), db.transactions.clear(), db.settings.clear(), db.rules.clear(), db.outbox.clear(), db.meta.clear()])
 }

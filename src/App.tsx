@@ -10,6 +10,7 @@ import { Conto } from './screens/Conto'
 import { Home } from './screens/Home'
 import { Impostazioni } from './screens/Impostazioni'
 import { Movimenti } from './screens/Movimenti'
+import { Regole } from './screens/Regole'
 import { Saldo } from './screens/Saldo'
 import { Salvadanai } from './screens/Salvadanai'
 import { SpeseFisse } from './screens/SpeseFisse'
@@ -48,6 +49,7 @@ export function App() {
         <Route path="/movimento/:id" element={<Aggiungi />} />
         <Route path="/conto/:id" element={<Conto />} />
         <Route path="/saldo/:view" element={<Saldo />} />
+        <Route path="/regole" element={<Regole />} />
         <Route path="/invita" element={<Invita />} />
         <Route path="*" element={<Home />} />
       </Routes>

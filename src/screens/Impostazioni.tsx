@@ -68,7 +68,7 @@ function FaceIdRow() {
 
 export function Impostazioni() {
   const { user, signOut } = useSession()
-  const { accounts, txs, me, pending, syncError, syncNow } = useData()
+  const { accounts, txs, rules, me, pending, syncError, syncNow } = useData()
   const shares = computeShares(accounts, txs)
   const exit = () => {
     const warning = pending > 0 ? `Ci sono ${pending} modifiche non ancora inviate: uscendo andranno perse. ` : ''
@@ -115,10 +115,10 @@ export function Impostazioni() {
           <RowText title="Spese fisse" sub={`${fixed.length} spese · ${formatEur(fixedTotal)} al mese`} />
           {chevron}
         </Link>
-        <button type="button" className="list-row">
-          <RowText title="Categorie e regole" sub="12 categorie · esercente → categoria" />
+        <Link to="/regole" className="list-row">
+          <RowText title="Categorie e regole" sub={`${rules.length} ${rules.length === 1 ? 'regola vostra' : 'regole vostre'} · esercente → categoria`} />
           {chevron}
-        </button>
+        </Link>
         <Link to="/statistiche" className="list-row">
           <RowText title="Budget mensili" sub="Avvisi all'80% e al 100%" />
           {chevron}

@@ -44,9 +44,21 @@ export interface Tx {
   toWho?: PersonKey
   /** Solo entrate: incasso con fattura, quindi con quota per le tasse. */
   invoice?: boolean
+  /** Esercente sconosciuto e categoria non scelta: da controllare. */
+  review?: boolean
   /** Giroconto automatico verso il conto tasse: id dell'entrata che l'ha generato. */
   taxOf?: string
   createdBy?: string
+}
+
+/** Regola "esercente → categoria" scelta dalla coppia. */
+export interface Rule {
+  id: string
+  /** Nome dell'esercente in forma normalizzata (vedi `normalizeMerchant`). */
+  pattern: string
+  /** Nome come è stato scritto, da mostrare. */
+  label: string
+  category: CategoryKey
 }
 
 export interface Settings {
