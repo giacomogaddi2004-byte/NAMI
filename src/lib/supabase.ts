@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 // L'indirizzo e la chiave "publishable" non sono segreti: possono stare nell'app.
 // La chiave "secret / service_role" invece non deve MAI comparire qui.
-const SUPABASE_URL = 'https://omjgsmwfzyjgxqhbzntf.supabase.co'
+export const SUPABASE_URL = 'https://omjgsmwfzyjgxqhbzntf.supabase.co'
 const SUPABASE_PUBLISHABLE_KEY: string = 'sb_publishable_rviTUJF5-qr5SuQ-EM34gg_RGPfxFmD'
 
 export const isConfigured = SUPABASE_PUBLISHABLE_KEY !== ''

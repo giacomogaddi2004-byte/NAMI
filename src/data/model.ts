@@ -123,6 +123,21 @@ export interface PiggyMove {
 export interface Settings {
   /** Chi è chi: id utente Supabase → persona. */
   people: Record<string, PersonKey>
+  /** Carta di Apple Pay (nome come lo manda il Comando) → id del conto. */
+  cards?: Record<string, string>
+}
+
+/** Pagamento Apple Pay arrivato dal Comando, in attesa di essere confermato o eliminato. */
+export interface Arrival {
+  id: string
+  /** Chi ha mandato l'arrivo (id utente Supabase). */
+  userId: string
+  /** Importo come testo grezzo, es. "12,90 €". */
+  amountRaw: string
+  merchant: string
+  card: string
+  /** Momento di arrivo (ISO). */
+  receivedAt: string
 }
 
 export const OWNER_LABEL: Record<Owner, string> = { jack: 'Di Jack', fiore: 'Di Fiore', entrambi: 'Di entrambi' }

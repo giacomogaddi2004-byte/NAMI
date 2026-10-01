@@ -4,10 +4,12 @@ import { ErrorBox } from '../auth/screens'
 import { CatIcon } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { CAT, EXPENSE_CATEGORIES, INCOME_CATEGORIES, type CategoryKey } from '../data/categories'
-import { PEOPLE, type Account, type PersonKey, type PiggyBank, type Tx, type TxType } from '../data/model'
+import { PEOPLE, type Account, type Arrival, type PersonKey, type PiggyBank, type Tx, type TxType } from '../data/model'
 import { useData } from '../data/store'
 import { isSplit } from '../lib/balances'
-import { today } from '../lib/dates'
+import { dayOf, today } from '../lib/dates'
+import { parseShortcutAmount } from '../lib/arrivals'
+import { stableId } from '../lib/ids'
 import { formatEur, parseEur, TAX_PERCENT, taxShare } from '../lib/money'
 import { piggyShares, settlements } from '../lib/piggy'
 import { crossed } from '../lib/budget'
@@ -48,32 +50,39 @@ function WhoSelect({ label, value, onChange }: { label: string; value: PersonKey
 /** Nuovo movimento, oppure modifica di uno esistente (`/movimento/:id`). */
 export function Aggiungi() {
   const { id } = useParams()
-  const { txs, piggyBanks } = useData()
+  const { txs, piggyBanks, arrivals } = useData()
   const [params] = useSearchParams()
   const existing = id ? txs.find((t) => t.id === id) : undefined
   // Arrivando da “Ottenuto”: l'acquisto libera i soldi del salvadanaio.
   const piggy = !id ? piggyBanks.find((p) => p.id === params.get('piggy') && !p.achieved) : undefined
-  // Movimento cancellato nel frattempo, magari dal partner.
-  if (id && !existing) return <Navigate to="/movimenti" replace />
-  return <TxForm key={id ?? piggy?.id ?? 'nuovo'} existing={existing} piggy={piggy} />
+  // Arrivando da “Arrivi da Apple Pay”: il pagamento è già compilato.
+  const arrivalId = !id ? params.get('arrivo') : null
+  const arrival = arrivalId ? arrivals.find((a) => a.id === arrivalId) : undefined
+  // Movimento o arrivo cancellato nel frattempo, magari dal partner.
+  if ((id && !existing) || (arrivalId && !arrival)) return <Navigate to="/movimenti" replace />
+  return <TxForm key={id ?? piggy?.id ?? arrival?.id ?? 'nuovo'} existing={existing} piggy={piggy} arrival={arrival} />
 }
 
-function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
+function TxForm({ existing, piggy, arrival }: { existing?: Tx; piggy?: PiggyBank; arrival?: Arrival }) {
   const navigate = useNavigate()
-  const { accounts, txs, rules, budgets, me, piggyMoves, saveTx, deleteTx, saveTxs, saveRule, completePiggy } = useData()
+  const { accounts, txs, rules, budgets, me, piggyMoves, saveTx, deleteTx, saveTxs, saveRule, completePiggy, settings, confirmArrival, saveSettings } = useData()
   const mine = accounts.find((a) => a.owner === me) ?? accounts[0]
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'uscita')
-  const [amount, setAmount] = useState(existing ? formatEur(existing.cents).replace(' €', '') : piggy ? formatEur(piggy.goal).replace(' €', '') : '')
-  const [merchant, setMerchant] = useState(existing?.merchant ?? '')
+  const arrivalCents = arrival ? parseShortcutAmount(arrival.amountRaw) : null
+  const arrivalAccount = arrival ? accounts.find((a) => a.id === settings?.cards?.[arrival.card]) : undefined
+  const [amount, setAmount] = useState(
+    existing ? formatEur(existing.cents).replace(' €', '') : piggy ? formatEur(piggy.goal).replace(' €', '') : arrivalCents ? formatEur(arrivalCents).replace(' €', '') : arrival?.amountRaw ?? '',
+  )
+  const [merchant, setMerchant] = useState(existing?.merchant ?? arrival?.merchant ?? '')
   // Categoria scelta a mano per un'uscita; finché è null decide la regola dell'esercente.
   const [expensePick, setExpensePick] = useState<CategoryKey | null>(existing?.type === 'uscita' && !existing.review ? (existing.category ?? 'altro') : null)
   const [incomeCat, setIncomeCat] = useState<CategoryKey>(existing?.type === 'entrata' ? (existing.category ?? 'altro') : 'lavoro')
-  const [accountId, setAccountId] = useState(existing?.accountId ?? mine.id)
+  const [accountId, setAccountId] = useState(existing?.accountId ?? arrivalAccount?.id ?? mine.id)
   const [toAccountId, setToAccountId] = useState(existing?.toAccountId ?? accounts.find((a) => a.id !== mine.id)?.id ?? mine.id)
-  const [who, setWho] = useState<PersonKey>(existing?.who ?? me ?? 'jack')
+  const [who, setWho] = useState<PersonKey>(existing?.who ?? (arrival && settings?.people[arrival.userId]) ?? me ?? 'jack')
   const [toWho, setToWho] = useState<PersonKey>(existing?.toWho ?? existing?.who ?? me ?? 'jack')
-  const [date, setDate] = useState(existing?.date ?? today())
+  const [date, setDate] = useState(existing?.date ?? (arrival ? dayOf(arrival.receivedAt) : today()))
   // Finché non lo tocchi, l'interruttore Fattura è acceso solo per la categoria Lavoro.
   const [invoiceChoice, setInvoiceChoice] = useState<boolean | null>(existing?.type === 'entrata' ? !!existing.invoice : null)
   const [error, setError] = useState<string | null>(null)
@@ -114,7 +123,8 @@ function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
     const sameQuota = (fromSplit ? who : null) === (toSplit ? toWho : null)
     if (isTransfer && accountId === toAccountId && sameQuota) return setError('Scegli due conti diversi.')
     setBusy(true)
-    const id = existing?.id ?? crypto.randomUUID()
+    // Un arrivo ha sempre lo stesso id di movimento: confermarlo da due telefoni non lo duplica.
+    const id = existing?.id ?? (arrival ? await stableId(`arrival:${arrival.id}`) : crypto.randomUUID())
     const tx: Tx = {
       id,
       type,
@@ -133,7 +143,13 @@ function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
       recurrenceMonth: existing?.recurrenceMonth,
     }
     if (piggy && type === 'uscita') await completePiggy(piggy, tx)
-    else await saveTx(tx)
+    else if (arrival && type === 'uscita') {
+      // La carta si ricorda: la prossima volta il conto è già scelto.
+      if (settings && arrival.card && settings.cards?.[arrival.card] !== accountId) {
+        await saveSettings({ ...settings, cards: { ...settings.cards, [arrival.card]: accountId } })
+      }
+      await confirmArrival(arrival, tx)
+    } else await saveTx(tx)
     await learnRule(id)
     void warnBudget(tx)
     navigate(-1)
@@ -189,7 +205,11 @@ function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
         )}
       </div>
 
-      {piggy ? (
+      {arrival ? (
+        <div className="notice notice--ok">
+          Da Apple Pay · {arrival.card || 'carta sconosciuta'}. Controlla i dati e salva.{arrivalAccount ? '' : ' Il conto scelto verrà ricordato per questa carta.'}
+        </div>
+      ) : piggy ? (
         <div className="notice notice--ok">
           Acquisto per <b>{piggy.name}</b>. Scegli l'esercente: al salvataggio i soldi messi da parte tornano disponibili e il salvadanaio risulta ottenuto.
           {transfers.map((t) => (

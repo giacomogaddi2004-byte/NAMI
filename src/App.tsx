@@ -10,6 +10,7 @@ import { Conto } from './screens/Conto'
 import { Home } from './screens/Home'
 import { Impostazioni } from './screens/Impostazioni'
 import { Movimenti } from './screens/Movimenti'
+import { ApplePay } from './screens/ApplePay'
 import { Budget } from './screens/Budget'
 import { Regole } from './screens/Regole'
 import { Saldo } from './screens/Saldo'
@@ -58,6 +59,7 @@ export function App() {
         <Route path="/saldo/:view" element={<Saldo />} />
         <Route path="/regole" element={<Regole />} />
         <Route path="/budget" element={<Budget />} />
+        <Route path="/apple-pay" element={<ApplePay />} />
         <Route path="/invita" element={<Invita />} />
         <Route path="*" element={<Home />} />
       </Routes>

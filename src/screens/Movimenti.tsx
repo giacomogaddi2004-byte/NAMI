@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Arrivals } from '../components/Arrivals'
 import { Icon, ICONS } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { TxRow, txTitle } from '../components/TxRow'
@@ -77,6 +78,8 @@ export function Movimenti() {
       </div>
 
       <Segmented options={filters} value={filter} onChange={setFilter} className="chips" />
+
+      <Arrivals />
 
       {groups.map((g) => (
         <div key={g.date} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

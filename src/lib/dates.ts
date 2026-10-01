@@ -8,6 +8,16 @@ export function today(now: Date = new Date()): string {
   return isoDay.format(now)
 }
 
+/** Il giorno a Roma di un istante ISO (es. l'arrivo di un pagamento). */
+export function dayOf(iso: string): string {
+  return isoDay.format(new Date(iso))
+}
+
+/** L'ora a Roma di un istante ISO, "11:42". */
+export function timeOf(iso: string): string {
+  return new Intl.DateTimeFormat('it-IT', { timeZone: ROME, hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
+
 /** Sposta un giorno di `days` giorni (anche negativi). */
 export function addDays(day: string, days: number): string {
   const d = new Date(`${day}T12:00:00Z`)

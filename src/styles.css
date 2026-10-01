@@ -468,6 +468,34 @@ h1 {
   color: #8a4b00;
 }
 
+/* Riga che si scorre a sinistra per mostrare "Elimina" */
+.swipe {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-radius: 16px;
+}
+
+.swipe::-webkit-scrollbar {
+  display: none;
+}
+
+.swipe > .swipe-main {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+}
+
+.swipe > .swipe-delete {
+  flex: 0 0 88px;
+  scroll-snap-align: end;
+  border: 0;
+  background: var(--over);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .notice--ok {
   background: #dff3e7;
   color: #0f5e34;
