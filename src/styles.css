@@ -237,6 +237,8 @@ h1 {
 }
 
 .tx-amount {
+  white-space: nowrap;
+  flex-shrink: 0;
   font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
   font-weight: 600;

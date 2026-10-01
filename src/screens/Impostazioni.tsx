@@ -50,12 +50,20 @@ export function Impostazioni() {
       </div>
 
       <Section title="Conti">
-        {ACCOUNTS.map((a) => (
-          <div key={a.name} className="list-row">
-            <RowText title={a.name} sub={a.owner} />
-            <div className="tx-amount">{formatEur(a.cents)}</div>
-          </div>
-        ))}
+        {ACCOUNTS.map((a) =>
+          a.to ? (
+            <Link key={a.name} to={a.to} className="list-row">
+              <RowText title={a.name} sub={a.owner} />
+              <div className="tx-amount">{formatEur(a.cents)}</div>
+              {chevron}
+            </Link>
+          ) : (
+            <div key={a.name} className="list-row">
+              <RowText title={a.name} sub={a.owner} />
+              <div className="tx-amount">{formatEur(a.cents)}</div>
+            </div>
+          ),
+        )}
         <button type="button" className="list-row" style={{ fontWeight: 600, color: 'var(--primary)' }}>+ Aggiungi conto</button>
       </Section>
 

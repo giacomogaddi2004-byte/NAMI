@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { CatIcon } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { CAT, EXPENSE_CATEGORIES, INCOME_CATEGORIES, type CategoryKey } from '../data/categories'
+import { formatEur, parseEur, TAX_PERCENT, taxShare } from '../lib/money'
 
 const TYPES = [['uscita', 'Uscita'], ['entrata', 'Entrata'], ['giroconto', 'Giroconto']] as const
 type TxType = (typeof TYPES)[number][0]
@@ -20,6 +21,10 @@ export function Aggiungi() {
   const [incomeCat, setIncomeCat] = useState<CategoryKey>('lavoro')
 
   const isIncome = type === 'entrata'
+  const cents = parseEur(amount)
+  // Finché non lo tocchi, l'interruttore Fattura è acceso solo per la categoria Lavoro.
+  const [invoiceChoice, setInvoiceChoice] = useState<boolean | null>(null)
+  const invoice = invoiceChoice ?? incomeCat === 'lavoro'
   const cats = isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
   const picked = isIncome ? incomeCat : expenseCat
   const pick = isIncome ? setIncomeCat : setExpenseCat
@@ -95,6 +100,30 @@ export function Aggiungi() {
               )
             })}
           </div>
+          {isIncome && (
+            <div style={{ background: '#fff', borderRadius: 18, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, minHeight: 60 }}>
+              <div style={{ flexGrow: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>Fattura</div>
+                <div style={{ ...smallLabel, color: invoice ? 'var(--positive)' : 'var(--text-2)' }}>
+                  {invoice
+                    ? `${TAX_PERCENT}% al conto tasse${cents !== null ? `: ${formatEur(taxShare(cents))}` : ''}`
+                    : 'Incasso senza fattura: niente al conto tasse'}
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={invoice}
+                aria-label="Fattura"
+                onClick={() => setInvoiceChoice(!invoice)}
+                style={{ width: 52, height: 44, border: 0, background: 'transparent', padding: '6px 0', flexShrink: 0 }}
+              >
+                <span style={{ display: 'block', width: 52, height: 32, borderRadius: 16, background: invoice ? '#1F9D55' : '#C3C8D6', position: 'relative' }}>
+                  <span style={{ position: 'absolute', top: 3, left: invoice ? 23 : 3, width: 26, height: 26, borderRadius: 13, background: '#fff', transition: 'left 0.15s' }} />
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

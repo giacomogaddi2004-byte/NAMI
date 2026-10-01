@@ -116,10 +116,31 @@ export const SUBSCRIPTIONS: [string, number][] = [
   ['Giochi', 1000],
 ]
 
-export const ACCOUNTS = [
+export const PEOPLE = {
+  jack: { name: 'Jack', color: '#2B50E0', tint: '#E4EAFD' },
+  fiore: { name: 'Fiore', color: '#E8553A', tint: '#FDE9E4' },
+} as const
+export type PersonKey = keyof typeof PEOPLE
+
+/** Movimenti da e verso il conto tasse: positivi = accantonati, negativi = pagati. */
+export const TAX_MOVES: { who: PersonKey; name: string; date: string; cents: number }[] = [
+  { who: 'jack', name: '30% di Pagamento cliente', date: '16 ottobre · dal conto corrente', cents: 37500 },
+  { who: 'fiore', name: '30% di Fattura studio', date: '9 ottobre · dal conto di Fiore', cents: 24000 },
+  { who: 'jack', name: 'Pagamento F24', date: '30 settembre · tasse versate', cents: -60000 },
+  { who: 'fiore', name: '30% di Fattura studio', date: '22 settembre · dal conto di Fiore', cents: 60000 },
+  { who: 'jack', name: '30% di Pagamento cliente', date: '12 settembre · dal conto corrente', cents: 135000 },
+]
+
+export const ACCOUNTS: { name: string; owner: string; cents: number; to?: string }[] = [
   { name: 'Conto corrente', owner: 'Tuo', cents: 182040 },
   { name: 'Contanti', owner: 'Tuo', cents: 8500 },
   { name: 'Conto deposito', owner: 'Tuo · conta nei risparmi', cents: 300000 },
   { name: 'Conto corrente del partner', owner: 'Partner', cents: 64080 },
   { name: 'Conto spese di coppia', owner: 'Di entrambi', cents: 42700 },
+  {
+    name: 'Conto tasse',
+    owner: 'Di entrambi · fuori dal saldo disponibile',
+    cents: TAX_MOVES.reduce((a, m) => a + m.cents, 0),
+    to: '/conto-tasse',
+  },
 ]

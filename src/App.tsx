@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { TabBar } from './components/TabBar'
 import { Aggiungi } from './screens/Aggiungi'
+import { ContoTasse } from './screens/ContoTasse'
 import { Home } from './screens/Home'
 import { Impostazioni } from './screens/Impostazioni'
 import { Movimenti } from './screens/Movimenti'
@@ -36,6 +37,7 @@ export function App() {
         <Route path="/aggiungi" element={<Aggiungi />} />
         <Route path="/impostazioni" element={<Impostazioni />} />
         <Route path="/spese-fisse" element={<SpeseFisse />} />
+        <Route path="/conto-tasse" element={<ContoTasse />} />
         <Route path="*" element={<Home />} />
       </Routes>
     </div>

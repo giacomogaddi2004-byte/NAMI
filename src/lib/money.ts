@@ -1,5 +1,20 @@
 // Il denaro è sempre in centesimi interi. Qui solo la conversione in testo.
 
+/** Quota degli incassi di lavoro che va al conto tasse. */
+export const TAX_PERCENT = 30
+
+/** "1.250,5" → 125050. Restituisce null se il testo non è un importo. */
+export function parseEur(text: string): number | null {
+  const m = /^(\d+)(?:,(\d{1,2}))?$/.exec(text.trim().replace(/\./g, ''))
+  if (!m) return null
+  return Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'))
+}
+
+/** Quota per le tasse di un incasso, arrotondata al centesimo. */
+export function taxShare(cents: number): number {
+  return Math.round((cents * TAX_PERCENT) / 100)
+}
+
 /** 123456 → "1.234,56 €" (senza segno). */
 export function formatEur(cents: number): string {
   const abs = Math.abs(Math.trunc(cents))
