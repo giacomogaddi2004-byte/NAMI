@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, dayOf, dayTitle, longDay, monthName, shortDay, timeOf, today } from './dates'
-
-describe('istanti nel fuso di Roma', () => {
-  it('giorno e ora a Roma, con ora legale', () => {
-    expect(dayOf('2026-10-17T22:30:00Z')).toBe('2026-10-18')
-    expect(timeOf('2026-10-18T09:42:00Z')).toBe('11:42')
-    expect(timeOf('2026-01-18T09:42:00Z')).toBe('10:42')
-  })
-})
+import { addDays, dayTitle, longDay, monthName, shortDay, today } from './dates'
 
 describe('date nel fuso di Roma', () => {
   it('poco dopo mezzanotte a Roma è già il giorno nuovo, anche se a Londra no', () => {

@@ -6,28 +6,12 @@ import { decryptJson, encryptJson } from '../lib/crypto'
 import { TAX_PERCENT, taxShare } from '../lib/money'
 import { errorMessage, supabase } from '../lib/supabase'
 import { db, PRIMARY_KEY, rowKey, TABLES, type OutboxItem, type Row, type TableName } from './db'
-import type { Account, Arrival, Budget, PersonKey, PiggyBank, PiggyMove, Recurrence, Rule, Settings, Tx } from './model'
+import type { Account, Budget, PersonKey, PiggyBank, PiggyMove, Recurrence, Rule, Settings, Tx } from './model'
 import type { CategoryKey } from './categories'
 import { stableId } from '../lib/ids'
 import { piggyShares, settlements } from '../lib/piggy'
 import { today } from '../lib/dates'
 import { dueDates, occurrenceId, occurrenceKey } from '../lib/recurrences'
-
-/** Riga della tabella `arrivals` così come arriva dal server. */
-interface ArrivalRow {
-  id: string
-  user_id: string
-  amount_raw: string
-  merchant: string
-  card: string
-  received_at: string
-}
-
-/** Solo in sviluppo (`?demo`): due arrivi finti per provare l'elenco. */
-const DEMO_ARRIVALS: ArrivalRow[] = [
-  { id: 'demo-1', user_id: 'demo', amount_raw: '12,90 €', merchant: 'Farmacia Comunale', card: 'Carta Jack', received_at: new Date().toISOString() },
-  { id: 'demo-2', user_id: 'demo', amount_raw: '18,50 €', merchant: 'Libreria Rinascita', card: 'Carta Jack', received_at: new Date(Date.now() - 86_400_000).toISOString() },
-]
 
 const SYNC_EVERY_MS = 60_000
 const PAGE = 1000
@@ -55,8 +39,6 @@ interface Data {
   piggyMoves: PiggyMove[]
   /** Budget mensili attivi (uno per categoria). */
   budgets: Budget[]
-  /** Pagamenti Apple Pay da confermare o eliminare. */
-  arrivals: Arrival[]
   saveSettings: (settings: Settings) => Promise<void>
   saveAccounts: (accounts: Account[]) => Promise<void>
   /** Salva un movimento; per le entrate con fattura aggiorna anche il giroconto verso il conto tasse. */
@@ -76,9 +58,6 @@ interface Data {
   deleteMove: (move: PiggyMove) => Promise<void>
   /** Imposta i budget: una categoria senza limite (o a zero) perde il suo budget. */
   setBudgets: (limits: Partial<Record<CategoryKey, number>>) => Promise<void>
-  /** Salva il movimento nato da un arrivo Apple Pay e lo toglie dall'elenco degli arrivi. */
-  confirmArrival: (arrival: Arrival, tx: Tx) => Promise<void>
-  dismissArrival: (arrival: Arrival) => Promise<void>
   /** Registra l'acquisto, libera i soldi del salvadanaio e lo segna come ottenuto, tutto insieme. */
   completePiggy: (piggy: PiggyBank, purchase: Tx) => Promise<void>
   syncNow: () => void
@@ -109,7 +88,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [piggyBanks, setPiggyBanks] = useState<PiggyBank[]>([])
   const [piggyMoves, setPiggyMoves] = useState<PiggyMove[]>([])
   const [budgets, setBudgetList] = useState<Budget[]>([])
-  const [arrivals, setArrivals] = useState<Arrival[]>([])
   const generating = useRef(false)
   const running = useRef(false)
   const again = useRef(false)
@@ -196,29 +174,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setLoaded(true)
   }, [key, householdId])
 
-  /** Scarica gli arrivi Apple Pay e ritenta a cancellare quelli già gestiti ma non ancora tolti dal server. */
-  const pullArrivals = useCallback(async () => {
-    const handled = new Set<string>(JSON.parse((await db.meta.get('arrivals-handled'))?.value ?? '[]'))
-    let rows: ArrivalRow[]
-    if (DEMO) {
-      rows = DEMO_ARRIVALS
-    } else {
-      for (const id of [...handled]) {
-        const { error } = await supabase.from('arrivals').delete().eq('id', id)
-        if (!error) handled.delete(id)
-      }
-      await db.meta.put({ key: 'arrivals-handled', value: JSON.stringify([...handled]) })
-      const { data, error } = await supabase.from('arrivals').select('*').order('received_at')
-      if (error) throw error
-      rows = (data ?? []) as ArrivalRow[]
-    }
-    setArrivals(
-      rows
-        .filter((r) => !handled.has(r.id))
-        .map((r) => ({ id: r.id, userId: r.user_id, amountRaw: r.amount_raw, merchant: r.merchant, card: r.card, receivedAt: r.received_at })),
-    )
-  }, [])
-
   /** Invia la coda, poi scarica le novità. */
   const sync = useCallback(async () => {
     if (!householdId) return
@@ -233,7 +188,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (DEMO) {
           await db.outbox.clear()
           await reload()
-          await pullArrivals()
           break
         }
         for (const item of await db.outbox.orderBy('seq').toArray()) {
@@ -258,7 +212,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (rows.length < PAGE) break
           }
         }
-        await pullArrivals()
         await reload()
       } while (again.current)
       setSynced(true)
@@ -269,7 +222,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       running.current = false
     }
-  }, [householdId, reload, pullArrivals])
+  }, [householdId, reload])
 
   useEffect(() => {
     if (!key || !householdId) return
@@ -434,28 +387,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [budgets, seal, write],
   )
 
-  /** Un arrivo gestito sparisce subito dall'elenco; il server lo cancella appena c'è rete. */
-  const finishArrival = useCallback(
-    async (id: string) => {
-      const handled = new Set<string>(JSON.parse((await db.meta.get('arrivals-handled'))?.value ?? '[]'))
-      handled.add(id)
-      await db.meta.put({ key: 'arrivals-handled', value: JSON.stringify([...handled]) })
-      setArrivals((list) => list.filter((a) => a.id !== id))
-      void sync()
-    },
-    [sync],
-  )
-
-  const confirmArrival = useCallback(
-    async (arrival: Arrival, tx: Tx) => {
-      await write([await sealTx(tx)])
-      await finishArrival(arrival.id)
-    },
-    [sealTx, write, finishArrival],
-  )
-
-  const dismissArrival = useCallback((arrival: Arrival) => finishArrival(arrival.id), [finishArrival])
-
   const savePiggy = useCallback(async (piggy: PiggyBank) => write([await sealPiggy(piggy)]), [sealPiggy, write])
 
   const deletePiggy = useCallback(
@@ -546,8 +477,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const me = (user && settings?.people[user.id]) || null
   const value = useMemo<Data>(
-    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, budgets, arrivals, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, setBudgets, completePiggy, confirmArrival, dismissArrival, syncNow: sync }),
-    [loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, budgets, arrivals, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, setBudgets, completePiggy, confirmArrival, dismissArrival, sync],
+    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, budgets, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, setBudgets, completePiggy, syncNow: sync }),
+    [loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, budgets, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, setBudgets, completePiggy, sync],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

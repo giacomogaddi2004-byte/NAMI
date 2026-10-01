@@ -177,10 +177,6 @@ export function Impostazioni() {
           <RowText title="Budget mensili" sub={budgets.length > 0 ? `${budgets.length} categorie · ${formatEur(budgetTotal(budgets))} al mese` : 'Avvisi all’80% e al 100%'} />
           {chevron}
         </Link>
-        <Link to="/apple-pay" className="list-row">
-          <RowText title="Comando Apple Pay" sub="Pagamenti dall’iPhone, da confermare in app" />
-          {chevron}
-        </Link>
       </Section>
 
       <Section title="Sicurezza e dati">
