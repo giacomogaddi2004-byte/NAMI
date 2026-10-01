@@ -16,7 +16,6 @@ import { useView } from '../lib/view'
 
 const VIEWS = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name], ['coppia', 'Coppia']] as const
 
-const WAVE = 'c19 0 19-18 38-18s19 18 38 18 19-18 38-18 19 18 38 18 19-18 38-18 19 18 38 18'
 const R = 52
 const C = 2 * Math.PI * R
 const LEGEND_TOP = 5
@@ -104,11 +103,10 @@ export function Home() {
         aria-label="Saldo disponibile: vedi i conti che lo compongono"
         style={{ position: 'relative', overflow: 'hidden', background: 'var(--primary)', borderRadius: 26, padding: '24px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: 6 }}
       >
-        <svg width="230" height="96" viewBox="0 0 230 96" fill="none" stroke="#FFFFFF" strokeOpacity="0.16" strokeWidth="3" strokeLinecap="round" aria-hidden="true" style={{ position: 'absolute', right: -18, bottom: -14 }}>
-          <path d={`M0 40${WAVE}`} />
-          <path d={`M0 64${WAVE}`} />
-          <path d={`M0 88${WAVE}`} />
-        </svg>
+        {/* Il simbolo di NAMI, molto tenue, come filigrana nell'angolo. */}
+        <span aria-hidden="true" style={{ position: 'absolute', right: -6, bottom: -46, opacity: 0.15, color: '#fff', transform: 'rotate(12deg)', display: 'flex' }}>
+          <LogoMark height={150} />
+        </span>
         <div style={{ fontSize: 14, fontWeight: 600, color: '#DCE3FF' }}>Saldo disponibile</div>
         <div className="num" style={{ fontSize: available >= 10000000 || available < 0 ? 38 : 46, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.05, whiteSpace: 'nowrap' }}>
           {available < 0 && '−'}
