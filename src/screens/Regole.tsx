@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useConfirm } from '../components/Confirm'
 import { CatIcon, Icon, ICONS } from '../components/Icon'
 import { CAT, EXPENSE_CATEGORIES, type CategoryKey } from '../data/categories'
 import { BUILTIN_MERCHANTS } from '../data/merchants'
@@ -7,6 +8,7 @@ import { BUILTIN_COUNT } from '../lib/rules'
 
 /** Regole esercente → categoria: quelle della coppia (modificabili) e l'elenco iniziale. */
 export function Regole() {
+  const ask = useConfirm()
   const { rules, saveRule, deleteRule } = useData()
 
   return (
@@ -50,7 +52,7 @@ export function Regole() {
               <button
                 type="button"
                 aria-label={`Elimina la regola per ${rule.label}`}
-                onClick={() => window.confirm(`Eliminare la regola per ${rule.label}?`) && void deleteRule(rule)}
+                onClick={async () => (await ask(`Eliminare la regola per ${rule.label}?`, { confirmLabel: 'Elimina', danger: true })) && void deleteRule(rule)}
                 className="cat-icon"
                 style={{ width: 44, height: 44, border: 0, borderRadius: 12, background: 'transparent', color: 'var(--over)' }}
               >

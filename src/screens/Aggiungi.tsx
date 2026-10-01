@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorBox } from '../auth/screens'
 import { CatIcon } from '../components/Icon'
+import { useConfirm } from '../components/Confirm'
 import { Segmented } from '../components/Segmented'
 import { CAT, EXPENSE_CATEGORIES, INCOME_CATEGORIES, type CategoryKey } from '../data/categories'
 import { PEOPLE, type Account, type PersonKey, type PiggyBank, type Tx, type TxType } from '../data/model'
@@ -60,6 +61,7 @@ export function Aggiungi() {
 
 function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
   const navigate = useNavigate()
+  const ask = useConfirm()
   const { accounts, txs, rules, budgets, me, piggyMoves, saveTx, deleteTx, saveTxs, saveRule, completePiggy } = useData()
   const mine = accounts.find((a) => a.owner === me) ?? accounts[0]
 
@@ -159,17 +161,17 @@ function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
   const learnRule = async (savedId: string) => {
     const changed = !existing || existing.review || existing.category !== expensePick || existing.merchant !== shop
     if (type !== 'uscita' || !expensePick || !shop || suggested === expensePick || !changed) return
-    if (!window.confirm(`Usare sempre “${CAT[expensePick].name}” per ${shop}?`)) return
+    if (!(await ask(`Usare sempre “${CAT[expensePick].name}” per ${shop}?`, { confirmLabel: 'Sì, sempre', cancelLabel: 'No' }))) return
     const pattern = normalizeMerchant(shop)
     await saveRule({ id: rules.find((r) => r.pattern === pattern)?.id ?? crypto.randomUUID(), pattern, label: shop, category: expensePick })
     const past = sameMerchant(txs, shop, expensePick, savedId)
-    if (past.length > 0 && window.confirm(`Correggere anche ${past.length === 1 ? 'il movimento passato' : `i ${past.length} movimenti passati`} di ${shop}?`)) {
+    if (past.length > 0 && (await ask(`Correggere anche ${past.length === 1 ? 'il movimento passato' : `i ${past.length} movimenti passati`} di ${shop}?`, { confirmLabel: 'Sì, correggi', cancelLabel: 'No' }))) {
       await saveTxs(past.map((t) => ({ ...t, category: expensePick, review: undefined })))
     }
   }
 
   const remove = async () => {
-    if (!existing || !window.confirm('Eliminare questo movimento?')) return
+    if (!existing || !(await ask('Eliminare questo movimento?', { confirmLabel: 'Elimina', danger: true }))) return
     setBusy(true)
     await deleteTx(existing.id)
     navigate(-1)

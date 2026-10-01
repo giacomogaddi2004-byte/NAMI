@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useConfirm } from '../components/Confirm'
 import { Icon, ICONS } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { PEOPLE, PERSON_KEYS, type PiggyBank, type PiggyMove, type View } from '../data/model'
@@ -20,6 +21,7 @@ const actionBtn = { height: 50, borderRadius: 16, fontSize: 16, fontWeight: 700,
 const monthList = (months: string[]) => months.map((m) => monthName(`${m}-01`)).join(', ')
 
 function PiggyCard({ piggy }: { piggy: PiggyBank }) {
+  const ask = useConfirm()
   const { piggyMoves, accounts, deleteMove } = useData()
   const [all, setAll] = useState(false)
   const day = today()
@@ -33,8 +35,8 @@ function PiggyCard({ piggy }: { piggy: PiggyBank }) {
   const plan = pace(missing, day, piggy.deadline)
   const shown = all ? moves : moves.slice(0, 4)
 
-  const remove = (m: PiggyMove) => {
-    if (window.confirm(`Eliminare questo ${m.type} di ${formatEur(m.cents)}?`)) void deleteMove(m)
+  const remove = async (m: PiggyMove) => {
+    if (await ask(`Eliminare questo ${m.type} di ${formatEur(m.cents)}?`, { confirmLabel: 'Elimina', danger: true })) void deleteMove(m)
   }
 
   return (

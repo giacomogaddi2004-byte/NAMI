@@ -468,6 +468,94 @@ h1 {
   color: #8a4b00;
 }
 
+/* Finestra di conferma */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(22, 26, 46, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 340px;
+  background: #fff;
+  border-radius: 22px;
+  padding: 22px 20px 16px;
+  box-shadow: 0 20px 40px rgba(22, 26, 46, 0.25);
+}
+
+.dialog-text {
+  margin: 0 0 18px;
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialog-btn {
+  height: 48px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dialog-btn--primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.dialog-btn--danger {
+  border-color: var(--over);
+  background: var(--over);
+  color: #fff;
+}
+
+/* Avviso "nuova versione" */
+.update-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + 10px);
+  z-index: 20;
+  width: calc(100% - 32px);
+  max-width: 448px;
+  background: var(--text);
+  color: #fff;
+  border-radius: 16px;
+  padding: 8px 8px 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.update-banner button {
+  height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .notice--ok {
   background: #dff3e7;
   color: #0f5e34;

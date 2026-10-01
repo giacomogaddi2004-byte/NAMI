@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useSession } from '../auth/session'
 import { disablePush, enablePush, pushState, showLocalTest, type PushState } from '../lib/push'
 import { errorMessage, supabase } from '../lib/supabase'
+import { useConfirm } from '../components/Confirm'
 import { Icon, ICONS } from '../components/Icon'
 import { OWNER_LABEL, PEOPLE } from '../data/model'
 import { useData } from '../data/store'
@@ -123,11 +124,12 @@ function NotificationsRow() {
 
 export function Impostazioni() {
   const { user, signOut } = useSession()
+  const ask = useConfirm()
   const { accounts, txs, rules, recurrences, budgets, me, pending, syncError, syncNow } = useData()
   const shares = computeShares(accounts, txs)
-  const exit = () => {
+  const exit = async () => {
     const warning = pending > 0 ? `Ci sono ${pending} modifiche non ancora inviate: uscendo andranno perse. ` : ''
-    if (window.confirm(`${warning}Vuoi uscire? Al rientro servirà la frase segreta.`)) void signOut()
+    if (await ask(`${warning}Vuoi uscire? Al rientro servirà la frase segreta.`, { confirmLabel: 'Esci', danger: true })) void signOut()
   }
   const fixedTotal = recurrences.reduce((sum, r) => sum + r.cents, 0)
 
@@ -200,14 +202,14 @@ export function Impostazioni() {
           <RowText title="Cifratura totale" sub="I dati lasciano il telefono già cifrati" />
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--positive)', background: '#DFF3E7', borderRadius: 8, padding: '4px 8px' }}>Attiva</span>
         </div>
-        <button type="button" className="list-row">
-          <RowText title="Kit di recupero" sub="Conservalo: senza, i dati non si recuperano" subStyle={{ color: '#8A4B00', fontWeight: 600 }} />
+        <Link to="/sicurezza" className="list-row">
+          <RowText title="Sicurezza e accessi" sub="Frase segreta, kit di recupero, password, dispositivi" />
           {chevron}
-        </button>
-        <button type="button" className="list-row">
+        </Link>
+        <Link to="/esporta" className="list-row">
           <RowText title="Esporta tutto in CSV" sub="Backup leggibile, da tenere al sicuro" />
           <Icon d={ICONS.download} size={20} color="#2B50E0" width={2.2} />
-        </button>
+        </Link>
         <button type="button" className="list-row" onClick={exit}>
           <RowText title="Esci" sub={`${user?.email ?? ''} · al rientro servirà la frase segreta`} />
         </button>

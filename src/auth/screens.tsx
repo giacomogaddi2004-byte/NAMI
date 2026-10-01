@@ -119,7 +119,7 @@ export function SignIn() {
 }
 
 /** Mostra il kit di recupero una sola volta, poi apre l'app. */
-function RecoveryKit({ code, onDone }: { code: string; onDone: () => Promise<void> }) {
+export function RecoveryKit({ code, onDone }: { code: string; onDone: () => void | Promise<void> }) {
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
 

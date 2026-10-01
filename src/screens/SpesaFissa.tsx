@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { ErrorBox, Field } from '../auth/screens'
+import { useConfirm } from '../components/Confirm'
 import { Segmented } from '../components/Segmented'
 import { CAT, EXPENSE_CATEGORIES, type CategoryKey } from '../data/categories'
 import { PEOPLE, type PersonKey, type Recurrence } from '../data/model'
@@ -24,6 +25,7 @@ export function SpesaFissa() {
 
 function RecurrenceForm({ existing }: { existing?: Recurrence }) {
   const navigate = useNavigate()
+  const ask = useConfirm()
   const { accounts, me, saveRecurrences, deleteRecurrence } = useData()
   const defaultAccount = accounts.find((a) => a.owner === me && a.kind === 'corrente') ?? accounts[0]
 
@@ -70,7 +72,7 @@ function RecurrenceForm({ existing }: { existing?: Recurrence }) {
   }
 
   const remove = async () => {
-    if (!existing || !window.confirm(`Eliminare ${existing.name}? I movimenti già registrati restano.`)) return
+    if (!existing || !(await ask(`Eliminare ${existing.name}? I movimenti già registrati restano.`, { confirmLabel: 'Elimina', danger: true }))) return
     await deleteRecurrence(existing)
     navigate(-1)
   }

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorBox, Field } from '../auth/screens'
+import { useConfirm } from '../components/Confirm'
 import type { PiggyBank } from '../data/model'
 import { useData } from '../data/store'
 import { formatEur, parseEur } from '../lib/money'
@@ -20,6 +21,7 @@ export function Salvadanaio() {
 
 function PiggyForm({ existing }: { existing?: PiggyBank }) {
   const navigate = useNavigate()
+  const ask = useConfirm()
   const [params] = useSearchParams()
   const { piggyBanks, savePiggy, deletePiggy } = useData()
   const preset = !existing && params.get('preset') === 'computer'
@@ -50,7 +52,7 @@ function PiggyForm({ existing }: { existing?: PiggyBank }) {
   const remove = async () => {
     if (!existing) return
     const warning = existing.achieved ? '' : ' I soldi messi da parte tornano disponibili.'
-    if (!window.confirm(`Eliminare “${existing.name}”?${warning}`)) return
+    if (!(await ask(`Eliminare “${existing.name}”?${warning}`, { confirmLabel: 'Elimina', danger: true }))) return
     await deletePiggy(existing)
     navigate('/salvadanai', { replace: true })
   }

@@ -29,7 +29,8 @@ interface Session {
   retry: () => void
   /** Salva sul dispositivo la chiave appena sbloccata e apre l'app. */
   unlock: (raw: Uint8Array<ArrayBuffer>, householdId: string) => Promise<void>
-  signOut: () => Promise<void>
+  /** Esce da questo dispositivo, oppure da tutti (`everywhere`). */
+  signOut: (everywhere?: boolean) => Promise<void>
 }
 
 const Ctx = createContext<Session | null>(null)
@@ -118,10 +119,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [userId],
   )
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (everywhere = false) => {
     await clearKeys()
     await clearLocalData()
-    await supabase.auth.signOut()
+    await supabase.auth.signOut(everywhere ? { scope: 'global' } : undefined)
   }, [])
 
   const retry = useCallback(() => setAttempt((n) => n + 1), [])

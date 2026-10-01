@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Gate } from './auth/screens'
 import { TabBar } from './components/TabBar'
+import { UpdateBanner } from './components/UpdateBanner'
 import { DataProvider } from './data/store'
 import { SetupGate } from './screens/Setup'
 import { Invita } from './screens/Invita'
@@ -11,7 +12,9 @@ import { Home } from './screens/Home'
 import { Impostazioni } from './screens/Impostazioni'
 import { Movimenti } from './screens/Movimenti'
 import { Budget } from './screens/Budget'
+import { Esporta } from './screens/Esporta'
 import { Regole } from './screens/Regole'
+import { Sicurezza } from './screens/Sicurezza'
 import { Saldo } from './screens/Saldo'
 import { Salvadanai } from './screens/Salvadanai'
 import { Salvadanaio } from './screens/Salvadanaio'
@@ -37,6 +40,7 @@ export function App() {
 
   return (
     <div className="app">
+      <UpdateBanner />
       <Gate>
       <DataProvider>
       <SetupGate>
@@ -58,6 +62,8 @@ export function App() {
         <Route path="/saldo/:view" element={<Saldo />} />
         <Route path="/regole" element={<Regole />} />
         <Route path="/budget" element={<Budget />} />
+        <Route path="/sicurezza" element={<Sicurezza />} />
+        <Route path="/esporta" element={<Esporta />} />
         <Route path="/invita" element={<Invita />} />
         <Route path="*" element={<Home />} />
       </Routes>

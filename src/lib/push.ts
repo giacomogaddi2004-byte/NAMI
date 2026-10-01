@@ -45,6 +45,12 @@ export async function enablePush(householdId: string): Promise<void> {
   if (error) throw error
 }
 
+/** Indirizzo di notifica di questo dispositivo, se è iscritto. */
+export async function currentEndpoint(): Promise<string | null> {
+  if (!pushSupported()) return null
+  return (await (await registration()).pushManager.getSubscription())?.endpoint ?? null
+}
+
 export async function disablePush(): Promise<void> {
   const sub = await (await registration()).pushManager.getSubscription()
   if (!sub) return
