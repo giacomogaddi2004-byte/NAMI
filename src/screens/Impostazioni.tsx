@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../auth/session'
+import { disablePush, enablePush, pushState, showLocalTest, type PushState } from '../lib/push'
 import { errorMessage, supabase } from '../lib/supabase'
 import { Icon, ICONS } from '../components/Icon'
 import { OWNER_LABEL, PEOPLE } from '../data/model'
@@ -61,6 +62,60 @@ function FaceIdRow() {
       <button type="button" onClick={register} disabled={busy} className="link" style={{ height: 44, padding: '0 4px', border: 0, background: 'transparent', flexShrink: 0 }}>
         {busy ? '…' : count ? 'Aggiungi' : 'Attiva'}
       </button>
+    </div>
+  )
+}
+
+/** Avvisi mattutini per le spese fisse in scadenza. */
+function NotificationsRow() {
+  const { householdId } = useSession()
+  const [state, setState] = useState<PushState | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void pushState().then(setState)
+  }, [])
+
+  const toggle = async () => {
+    if (!householdId) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (state === 'on') await disablePush()
+      else {
+        await enablePush(householdId)
+        await showLocalTest()
+      }
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setState(await pushState())
+      setBusy(false)
+    }
+  }
+
+  const sub =
+    error ??
+    (state === null
+      ? 'Controllo…'
+      : state === 'unsupported'
+        ? 'Aggiungi NAMI alla schermata Home per riceverle'
+        : state === 'blocked'
+          ? 'Bloccate: attivale da Impostazioni dell’iPhone → NAMI'
+          : state === 'on'
+            ? 'Attive su questo iPhone · ogni mattina alle 8'
+            : 'Un avviso al giorno quando scade una spesa fissa')
+  const warn = !!error || state === 'blocked'
+
+  return (
+    <div className="list-row">
+      <RowText title="Notifiche scadenze" sub={sub} subStyle={warn ? { color: 'var(--over)', fontWeight: 600 } : state === 'on' ? { color: 'var(--positive)', fontWeight: 600 } : undefined} />
+      {(state === 'on' || state === 'off') && (
+        <button type="button" onClick={toggle} disabled={busy} className="link" style={{ height: 44, padding: '0 4px', border: 0, background: 'transparent', flexShrink: 0 }}>
+          {busy ? '…' : state === 'on' ? 'Disattiva' : 'Attiva'}
+        </button>
+      )}
     </div>
   )
 }
@@ -139,6 +194,7 @@ export function Impostazioni() {
           </button>
         </div>
         <FaceIdRow />
+        <NotificationsRow />
         <Link to="/invita" className="list-row">
           <RowText title="Invita il partner" sub="Codice monouso, valido 15 minuti" />
           {chevron}
