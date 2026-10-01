@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, ICONS } from '../components/Icon'
+import { LogoMark } from '../components/LogoMark'
 import { Segmented } from '../components/Segmented'
 import { TxRow } from '../components/TxRow'
 import { CAT } from '../data/categories'
@@ -61,11 +62,8 @@ export function Home() {
     <div className="page">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="cat-icon" style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--primary)' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M2 10c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3" />
-              <path d="M2 16c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3" />
-            </svg>
+          <div className="cat-icon" style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--primary)', color: '#fff' }}>
+            <LogoMark height={26} />
           </div>
           <div>
             <div className="num" style={{ fontWeight: 700, fontSize: 21, letterSpacing: '0.06em' }}>NAMI</div>

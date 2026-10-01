@@ -13,6 +13,7 @@ import {
 } from '../lib/crypto'
 import { errorMessage, isConfigured, supabase } from '../lib/supabase'
 import { Segmented } from '../components/Segmented'
+import { LogoMark } from '../components/LogoMark'
 import { useSession } from './session'
 
 export const MIN_PASSWORD = 12
@@ -21,11 +22,8 @@ export const MIN_PASSPHRASE = 12
 function Logo() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '24px 0 8px' }}>
-      <div className="cat-icon" style={{ width: 64, height: 64, borderRadius: 20, background: 'var(--primary)' }}>
-        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M2 10c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3" />
-          <path d="M2 16c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3" />
-        </svg>
+      <div className="cat-icon" style={{ width: 64, height: 64, borderRadius: 20, background: 'var(--primary)', color: '#fff' }}>
+            <LogoMark height={42} />
       </div>
       <div className="num" style={{ fontWeight: 700, fontSize: 26, letterSpacing: '0.06em' }}>NAMI</div>
     </div>
