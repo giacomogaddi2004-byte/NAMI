@@ -7,7 +7,7 @@ import { CAT } from '../data/categories'
 import { DAYS, SPEND_BY_CATEGORY, SUMMARY, TODAY_LABEL } from '../data/mock'
 import { formatEur, formatEurRounded } from '../lib/money'
 
-const VIEWS = [['io', 'Io'], ['coppia', 'Coppia'], ['tutto', 'Tutto']] as const
+const VIEWS = [['jack', 'Jack'], ['fiore', 'Fiore'], ['coppia', 'Coppia']] as const
 type View = (typeof VIEWS)[number][0]
 
 const WAVE = 'c19 0 19-18 38-18s19 18 38 18 19-18 38-18 19 18 38 18 19-18 38-18 19 18 38 18'
@@ -16,7 +16,7 @@ const C = 2 * Math.PI * R
 const LEGEND_TOP = 5
 
 export function Home() {
-  const [view, setView] = useState<View>('tutto')
+  const [view, setView] = useState<View>('coppia')
 
   const spent = SPEND_BY_CATEGORY.reduce((a, [, c]) => a + c, 0)
   const budgetPct = Math.round((spent / SUMMARY.budgetTotal) * 100)
