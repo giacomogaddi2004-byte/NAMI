@@ -12,6 +12,8 @@ import { formatEur, formatEurRounded } from '../lib/money'
 
 const VIEWS = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name], ['coppia', 'Coppia']] as const
 
+const VIEW_KEY = 'nami-vista'
+
 const WAVE = 'c19 0 19-18 38-18s19 18 38 18 19-18 38-18 19 18 38 18 19-18 38-18 19 18 38 18'
 const R = 52
 const C = 2 * Math.PI * R
@@ -19,7 +21,12 @@ const LEGEND_TOP = 5
 
 export function Home() {
   const { accounts, txs, pending } = useData()
-  const [view, setView] = useState<View>('coppia')
+  // La vista scelta resta quella anche tornando da un'altra pagina.
+  const [view, setViewState] = useState<View>(() => (sessionStorage.getItem(VIEW_KEY) as View | null) ?? 'coppia')
+  const setView = (v: View) => {
+    sessionStorage.setItem(VIEW_KEY, v)
+    setViewState(v)
+  }
   const day = today()
 
   const shares = useMemo(() => computeShares(accounts, txs), [accounts, txs])
@@ -73,7 +80,11 @@ export function Home() {
 
       <Segmented options={VIEWS} value={view} onChange={setView} />
 
-      <div style={{ position: 'relative', overflow: 'hidden', background: 'var(--primary)', borderRadius: 26, padding: '24px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <Link
+        to={`/saldo/${view}`}
+        aria-label="Saldo disponibile: vedi i conti che lo compongono"
+        style={{ position: 'relative', overflow: 'hidden', background: 'var(--primary)', borderRadius: 26, padding: '24px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: 6 }}
+      >
         <svg width="230" height="96" viewBox="0 0 230 96" fill="none" stroke="#FFFFFF" strokeOpacity="0.16" strokeWidth="3" strokeLinecap="round" aria-hidden="true" style={{ position: 'absolute', right: -18, bottom: -14 }}>
           <path d={`M0 40${WAVE}`} />
           <path d={`M0 64${WAVE}`} />
@@ -87,7 +98,10 @@ export function Home() {
         <div style={{ fontSize: 13, color: '#DCE3FF', maxWidth: 230, lineHeight: 1.4 }}>
           Conti correnti e contanti. A parte: {formatEur(taxes)} per le tasse
         </div>
-      </div>
+        <span style={{ position: 'absolute', top: 22, right: 18, display: 'flex' }}>
+          <Icon d={ICONS.right} size={22} color="#DCE3FF" width={2.2} />
+        </span>
+      </Link>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>

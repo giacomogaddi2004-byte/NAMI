@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { ErrorBox, Field } from '../auth/screens'
 import { Icon, ICONS } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
@@ -23,6 +23,7 @@ const money = (cents: number) => (cents < 0 ? '−' : '') + formatEur(cents)
 /** Dettaglio di un conto: saldo, quote di Jack e Fiore, movimenti. */
 export function Conto() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { accounts, txs } = useData()
   const [filter, setFilter] = useState<Filter>('tutti')
   const [editing, setEditing] = useState(false)
@@ -40,10 +41,10 @@ export function Conto() {
 
   return (
     <div className="page page--plain">
-      <Link to="/impostazioni" className="back">
+      <button type="button" className="back" onClick={() => navigate(-1)} style={{ border: 0, background: 'transparent', padding: 0, color: 'var(--primary)' }}>
         <Icon d={ICONS.left} size={20} width={2.2} />
-        Impostazioni
-      </Link>
+        Indietro
+      </button>
       <div>
         <h1>{account.name}</h1>
         <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>{SUBTITLE[account.kind] ?? OWNER_LABEL[account.owner]}</div>
