@@ -217,7 +217,7 @@ export function Impostazioni() {
       </Section>
 
       <div className="muted" style={{ textAlign: 'center', fontSize: 12 }}>
-        NAMI {__APP_VERSION__} · Salvadanai e Statistiche sono ancora di esempio
+        NAMI {__APP_VERSION__} · Statistiche è ancora di esempio
       </div>
     </div>
   )

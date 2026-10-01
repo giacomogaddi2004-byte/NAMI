@@ -6,6 +6,7 @@ import { OWNER_LABEL, PEOPLE, type View } from '../data/model'
 import { useData } from '../data/store'
 import { computeShares, countsInAvailable, isSplit, viewAmount } from '../lib/balances'
 import { formatEur } from '../lib/money'
+import { piggyAmount } from '../lib/piggy'
 
 const VIEWS = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name], ['coppia', 'Coppia']] as const
 const COLORS = ['#2B50E0', '#0E8A7F', '#E8553A', '#E08A00', '#7C4DDB', '#C93582']
@@ -20,7 +21,7 @@ export function Saldo() {
   const navigate = useNavigate()
   const params = useParams()
   const view: View = params.view === 'jack' || params.view === 'fiore' ? params.view : 'coppia'
-  const { accounts, txs } = useData()
+  const { accounts, txs, piggyMoves } = useData()
   const shares = useMemo(() => computeShares(accounts, txs), [accounts, txs])
 
   // Per una persona: i suoi conti, più la sua quota dei conti di entrambi.
@@ -29,7 +30,8 @@ export function Saldo() {
     .filter(countsInAvailable)
     .map((a, i) => ({ account: a, cents: viewAmount(shares.get(a.id)!, view), color: COLORS[i % COLORS.length] }))
     .filter((r) => view === 'coppia' || r.account.owner === view || isSplit(r.account))
-  const total = rows.reduce((sum, r) => sum + r.cents, 0)
+  const piggy = piggyAmount(piggyMoves, view)
+  const total = rows.reduce((sum, r) => sum + r.cents, 0) - piggy
   const positive = rows.reduce((sum, r) => sum + Math.max(r.cents, 0), 0)
 
   let cum = 0
@@ -86,8 +88,20 @@ export function Saldo() {
         ))}
       </div>
 
+      {piggy !== 0 && (
+        <Link to="/salvadanai" className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', color: 'inherit' }}>
+          <span style={{ width: 14, height: 14, borderRadius: 5, background: '#B8BDCC', flexShrink: 0 }} />
+          <div style={{ flexGrow: 1 }}>
+            <div className="tx-name">Messi nei salvadanai</div>
+            <div className="tx-meta">Restano sui conti ma non sono disponibili</div>
+          </div>
+          <div className="tx-amount">{money(-piggy)}</div>
+          <Icon d={ICONS.right} size={18} color="#8A90A6" width={2.2} />
+        </Link>
+      )}
+
       <div className="muted" style={{ fontSize: 13, lineHeight: 1.45, padding: '0 4px' }}>
-        Il saldo disponibile somma conti correnti e contanti. Conto deposito e conto tasse restano fuori.
+        Il saldo disponibile somma conti correnti e contanti, meno i soldi nei salvadanai. Conto deposito e conto tasse restano fuori.
         {rows.some((r) => r.cents < 0) && ' I conti in rosso non compaiono nel grafico ma abbassano il totale.'}
       </div>
     </div>

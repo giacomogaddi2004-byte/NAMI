@@ -81,6 +81,36 @@ export interface Rule {
   category: CategoryKey
 }
 
+/** Salvadanaio virtuale di coppia: i soldi restano sul conto ma escono dal saldo disponibile. */
+export interface PiggyBank {
+  id: string
+  name: string
+  /** Colore dell'intestazione (esadecimale, es. "#7C4DDB"). */
+  color: string
+  /** Obiettivo in centesimi. */
+  goal: number
+  /** Data obiettivo facoltativa ("AAAA-MM-GG"). */
+  deadline?: string
+  /** Giorno in cui l'obiettivo è stato ottenuto (acquisto registrato). */
+  achieved?: string
+  order: number
+}
+
+/** Versamento o prelievo di una persona: la quota è sempre personale. */
+export interface PiggyMove {
+  id: string
+  piggyId: string
+  type: 'versamento' | 'prelievo'
+  /** Sempre positivo: il segno lo dà il tipo. */
+  cents: number
+  date: string
+  /** Conto da cui arrivano i soldi (solo informativo: non si spostano). */
+  accountId: string
+  who: PersonKey
+  note?: string
+  createdBy?: string
+}
+
 export interface Settings {
   /** Chi è chi: id utente Supabase → persona. */
   people: Record<string, PersonKey>

@@ -1,7 +1,7 @@
 // Copia locale dei dati (sempre cifrata) e coda delle modifiche da inviare.
 import Dexie, { type Table } from 'dexie'
 
-export type TableName = 'accounts' | 'transactions' | 'settings' | 'rules' | 'recurrences'
+export type TableName = 'accounts' | 'transactions' | 'settings' | 'rules' | 'recurrences' | 'piggy_banks' | 'piggy_moves'
 
 /** Una riga così come sta sul server: il contenuto vero è in `payload`, cifrato. */
 export interface Row {
@@ -19,6 +19,8 @@ export interface Row {
   /** Solo movimenti generati da una spesa fissa. */
   recurrence_id?: string | null
   recurrence_month?: string | null
+  /** Solo versamenti e prelievi dei salvadanai. */
+  piggy_bank_id?: string
 }
 
 export interface OutboxItem {
@@ -34,6 +36,8 @@ export const PRIMARY_KEY: Record<TableName, 'id' | 'household_id'> = {
   settings: 'household_id',
   rules: 'id',
   recurrences: 'id',
+  piggy_banks: 'id',
+  piggy_moves: 'id',
 }
 export const TABLES = Object.keys(PRIMARY_KEY) as TableName[]
 
@@ -45,6 +49,8 @@ export const db = new Dexie('nami-data') as Dexie & {
   settings: Table<Row, string>
   rules: Table<Row, string>
   recurrences: Table<Row, string>
+  piggy_banks: Table<Row, string>
+  piggy_moves: Table<Row, string>
   outbox: Table<OutboxItem, number>
   meta: Table<{ key: string; value: string }, string>
 }
@@ -58,8 +64,9 @@ db.version(1).stores({
 })
 db.version(2).stores({ rules: 'id' })
 db.version(3).stores({ recurrences: 'id' })
+db.version(4).stores({ piggy_banks: 'id', piggy_moves: 'id' })
 
 /** Cancella la copia locale (all'uscita dall'account). */
 export async function clearLocalData(): Promise<void> {
-  await Promise.all([db.accounts.clear(), db.transactions.clear(), db.settings.clear(), db.rules.clear(), db.recurrences.clear(), db.outbox.clear(), db.meta.clear()])
+  await Promise.all([db.accounts.clear(), db.transactions.clear(), db.settings.clear(), db.rules.clear(), db.recurrences.clear(), db.piggy_banks.clear(), db.piggy_moves.clear(), db.outbox.clear(), db.meta.clear()])
 }

@@ -1,18 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, ICONS } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { TxRow } from '../components/TxRow'
 import { CAT } from '../data/categories'
-import { PEOPLE, type View } from '../data/model'
+import { PEOPLE } from '../data/model'
 import { useData } from '../data/store'
 import { availableBalance, computeShares, inView, monthSummary, savingsTotal, taxTotal } from '../lib/balances'
 import { longDay, monthName, shortDay, today } from '../lib/dates'
 import { formatEur, formatEurRounded } from '../lib/money'
+import { piggyAmount } from '../lib/piggy'
+import { useView } from '../lib/view'
 
 const VIEWS = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name], ['coppia', 'Coppia']] as const
-
-const VIEW_KEY = 'nami-vista'
 
 const WAVE = 'c19 0 19-18 38-18s19 18 38 18 19-18 38-18 19 18 38 18 19-18 38-18 19 18 38 18'
 const R = 52
@@ -20,21 +20,18 @@ const C = 2 * Math.PI * R
 const LEGEND_TOP = 5
 
 export function Home() {
-  const { accounts, txs, pending } = useData()
-  // La vista scelta resta quella anche tornando da un'altra pagina.
-  const [view, setViewState] = useState<View>(() => (sessionStorage.getItem(VIEW_KEY) as View | null) ?? 'coppia')
-  const setView = (v: View) => {
-    sessionStorage.setItem(VIEW_KEY, v)
-    setViewState(v)
-  }
+  const { accounts, txs, piggyMoves, pending } = useData()
+  const [view, setView] = useView()
   const day = today()
 
   const shares = useMemo(() => computeShares(accounts, txs), [accounts, txs])
   const byId = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
   const month = useMemo(() => monthSummary(txs, day.slice(0, 7), byId, view), [txs, day, byId, view])
 
-  const available = availableBalance(accounts, shares, view)
-  const savings = savingsTotal(accounts, shares, view)
+  const piggy = piggyAmount(piggyMoves, view)
+  const available = availableBalance(accounts, shares, view, piggy)
+  const deposit = savingsTotal(accounts, shares, view)
+  const savings = deposit + piggy
   const taxes = taxTotal(accounts, shares, view)
 
   let cum = 0
@@ -96,7 +93,7 @@ export function Home() {
           {formatEur(available)}
         </div>
         <div style={{ fontSize: 13, color: '#DCE3FF', maxWidth: 230, lineHeight: 1.4 }}>
-          Conti correnti e contanti. A parte: {formatEur(taxes)} per le tasse
+          Conti correnti e contanti, meno {formatEur(piggy)} nei salvadanai. Tasse a parte: {formatEur(taxes)}
         </div>
         <span style={{ position: 'absolute', top: 22, right: 18, display: 'flex' }}>
           <Icon d={ICONS.right} size={22} color="#DCE3FF" width={2.2} />
@@ -112,7 +109,11 @@ export function Home() {
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="label">Totale risparmi</div>
           <div className="num" style={{ fontSize: 25, fontWeight: 700, color: 'var(--positive)', whiteSpace: 'nowrap' }}>{formatEur(savings)}</div>
-          <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>Conto deposito</div>
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>
+            Conto deposito {formatEur(deposit)}
+            <br />
+            Salvadanai {formatEur(piggy)}
+          </div>
         </div>
       </div>
 

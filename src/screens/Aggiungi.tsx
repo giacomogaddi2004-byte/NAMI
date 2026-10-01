@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorBox } from '../auth/screens'
 import { CatIcon } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { CAT, EXPENSE_CATEGORIES, INCOME_CATEGORIES, type CategoryKey } from '../data/categories'
-import { PEOPLE, type Account, type PersonKey, type Tx, type TxType } from '../data/model'
+import { PEOPLE, type Account, type PersonKey, type PiggyBank, type Tx, type TxType } from '../data/model'
 import { useData } from '../data/store'
 import { isSplit } from '../lib/balances'
 import { today } from '../lib/dates'
@@ -45,20 +45,23 @@ function WhoSelect({ label, value, onChange }: { label: string; value: PersonKey
 /** Nuovo movimento, oppure modifica di uno esistente (`/movimento/:id`). */
 export function Aggiungi() {
   const { id } = useParams()
-  const { txs } = useData()
+  const { txs, piggyBanks } = useData()
+  const [params] = useSearchParams()
   const existing = id ? txs.find((t) => t.id === id) : undefined
+  // Arrivando da “Ottenuto”: l'acquisto libera i soldi del salvadanaio.
+  const piggy = !id ? piggyBanks.find((p) => p.id === params.get('piggy') && !p.achieved) : undefined
   // Movimento cancellato nel frattempo, magari dal partner.
   if (id && !existing) return <Navigate to="/movimenti" replace />
-  return <TxForm key={id ?? 'nuovo'} existing={existing} />
+  return <TxForm key={id ?? piggy?.id ?? 'nuovo'} existing={existing} piggy={piggy} />
 }
 
-function TxForm({ existing }: { existing?: Tx }) {
+function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
   const navigate = useNavigate()
-  const { accounts, txs, rules, me, saveTx, deleteTx, saveTxs, saveRule } = useData()
+  const { accounts, txs, rules, me, saveTx, deleteTx, saveTxs, saveRule, completePiggy } = useData()
   const mine = accounts.find((a) => a.owner === me) ?? accounts[0]
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'uscita')
-  const [amount, setAmount] = useState(existing ? formatEur(existing.cents).replace(' €', '') : '')
+  const [amount, setAmount] = useState(existing ? formatEur(existing.cents).replace(' €', '') : piggy ? formatEur(piggy.goal).replace(' €', '') : '')
   const [merchant, setMerchant] = useState(existing?.merchant ?? '')
   // Categoria scelta a mano per un'uscita; finché è null decide la regola dell'esercente.
   const [expensePick, setExpensePick] = useState<CategoryKey | null>(existing?.type === 'uscita' && !existing.review ? (existing.category ?? 'altro') : null)
@@ -105,7 +108,7 @@ function TxForm({ existing }: { existing?: Tx }) {
     if (isTransfer && accountId === toAccountId && sameQuota) return setError('Scegli due conti diversi.')
     setBusy(true)
     const id = existing?.id ?? crypto.randomUUID()
-    await saveTx({
+    const tx: Tx = {
       id,
       type,
       cents,
@@ -121,7 +124,9 @@ function TxForm({ existing }: { existing?: Tx }) {
       review: type === 'uscita' && !expensePick && !suggested ? true : undefined,
       recurrenceId: existing?.recurrenceId,
       recurrenceMonth: existing?.recurrenceMonth,
-    })
+    }
+    if (piggy && type === 'uscita') await completePiggy(piggy, tx)
+    else await saveTx(tx)
     await learnRule(id)
     navigate(-1)
   }
@@ -160,7 +165,13 @@ function TxForm({ existing }: { existing?: Tx }) {
         )}
       </div>
 
-      <Segmented options={TYPES} value={type} onChange={setType} />
+      {piggy ? (
+        <div className="notice notice--ok">
+          Acquisto per <b>{piggy.name}</b>. Scegli l'esercente: al salvataggio i soldi messi da parte tornano disponibili e il salvadanaio risulta ottenuto.
+        </div>
+      ) : (
+        <Segmented options={TYPES} value={type} onChange={setType} />
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0 2px' }}>
         <label htmlFor="importo" className="label">Importo</label>
