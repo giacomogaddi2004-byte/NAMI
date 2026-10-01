@@ -1,6 +1,7 @@
 // Spese fisse: quando scadono e quali movimenti vanno creati.
 import { CAT, EXPENSE_CATEGORIES, type CategoryKey } from '../data/categories'
 import type { Recurrence } from '../data/model'
+import { addDays } from './dates'
 import { parseEur } from './money'
 
 /** Ultimo giorno di un mese "AAAA-MM". */
@@ -19,27 +20,58 @@ export function nextMonth(month: string): string {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
-/** Scadenze già passate (da `start` a `today` compresi) per le quali deve esistere un movimento. */
-export function dueDates(rec: Pick<Recurrence, 'day' | 'start'>, today: string): string[] {
+type Timing = Pick<Recurrence, 'day' | 'start' | 'end'>
+
+/** Scadenze tra due date (comprese), dentro il periodo in cui la spesa è attiva. */
+export function scheduleBetween(rec: Timing, from: string, to: string): string[] {
   const out: string[] = []
-  for (let month = rec.start.slice(0, 7); month <= today.slice(0, 7); month = nextMonth(month)) {
+  for (let month = from.slice(0, 7); month <= to.slice(0, 7); month = nextMonth(month)) {
     const due = dueDate(month, rec.day)
-    if (due >= rec.start && due <= today) out.push(due)
+    if (due >= from && due <= to && due >= rec.start && (!rec.end || due <= rec.end)) out.push(due)
   }
   return out
 }
 
-/** Prossima scadenza dopo oggi. */
-export function nextDue(rec: Pick<Recurrence, 'day' | 'start'>, today: string): string {
-  const from = rec.start > today ? rec.start : today
-  let month = from.slice(0, 7)
-  let due = dueDate(month, rec.day)
-  while (due < rec.start || due <= today) {
-    month = nextMonth(month)
-    due = dueDate(month, rec.day)
-  }
-  return due
+/** Scadenze già passate (da `start` a `today` compresi) per le quali deve esistere un movimento. */
+export function dueDates(rec: Timing, today: string): string[] {
+  return scheduleBetween(rec, rec.start, today)
 }
+
+/** Primo giorno da cui contare le scadenze future: l'inizio, se non è ancora arrivato, altrimenti domani. */
+const firstFuture = (rec: Pick<Recurrence, 'start'>, today: string) => (rec.start > today ? rec.start : addDays(today, 1))
+
+/** Prossima scadenza dopo oggi, o null se la spesa è finita. */
+export function nextDue(rec: Timing, today: string): string | null {
+  const from = firstFuture(rec, today)
+  for (let month = from.slice(0, 7); ; month = nextMonth(month)) {
+    const due = dueDate(month, rec.day)
+    if (rec.end && due > rec.end) return null
+    if (due >= from) return due
+  }
+}
+
+/** Quante scadenze restano dopo oggi (null se la spesa non ha una fine). */
+export function dueLeft(rec: Timing, today: string): number | null {
+  return rec.end ? scheduleBetween(rec, firstFuture(rec, today), rec.end).length : null
+}
+
+/** Data dell'ultima scadenza di una spesa con fine (null se non ne ha o non ne ha mai). */
+export function lastDue(rec: Timing): string | null {
+  if (!rec.end) return null
+  return scheduleBetween(rec, rec.start, rec.end).pop() ?? null
+}
+
+/** Data della `times`-esima scadenza, contando da `from` (compreso): è la fine di una spesa da ripetere `times` volte. */
+export function endAfter(day: number, from: string, times: number): string {
+  let left = times
+  for (let month = from.slice(0, 7); ; month = nextMonth(month)) {
+    const due = dueDate(month, day)
+    if (due >= from && --left === 0) return due
+  }
+}
+
+/** Da quando contare le ripetizioni di una spesa nuova o già in corso. */
+export const countFrom = (rec: Pick<Recurrence, 'start'>, today: string) => firstFuture(rec, today)
 
 /** Chiave di una registrazione: una sola per spesa fissa e mese. */
 export const occurrenceKey = (recurrenceId: string, due: string) => `${recurrenceId}:${due.slice(0, 7)}-01`
@@ -56,12 +88,16 @@ export async function occurrenceId(recurrenceId: string, due: string): Promise<s
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-export type ImportedRecurrence = Pick<Recurrence, 'name' | 'cents' | 'day' | 'category' | 'subs'>
+export type ImportedRecurrence = Pick<Recurrence, 'name' | 'cents' | 'day' | 'category' | 'subs'> & {
+  /** Quante volte ripeterla (una rata); vuoto = per sempre. */
+  times?: number
+}
 
 const CATEGORY_BY_NAME = new Map(EXPENSE_CATEGORIES.map((k) => [CAT[k].name.toLowerCase(), k]))
 
 /**
- * Legge un elenco di spese fisse, una per riga: `giorno; nome; importo; categoria`.
+ * Legge un elenco di spese fisse, una per riga: `giorno; nome; importo; categoria; volte`
+ * (le volte sono facoltative: servono per le rate).
  * Una riga che inizia con `-` è un dettaglio della spesa precedente: `-; nome; importo`.
  */
 export function parseRecurrences(text: string): { items: ImportedRecurrence[]; errors: string[] } {
@@ -86,7 +122,9 @@ export function parseRecurrences(text: string): { items: ImportedRecurrence[]; e
     if (!Number.isInteger(day) || day < 1 || day > 31) return fail(`"${parts[0]}" non è un giorno da 1 a 31`)
     const category: CategoryKey | undefined = CATEGORY_BY_NAME.get((parts[3] ?? '').toLowerCase())
     if (!category) return fail(`categoria "${parts[3] ?? ''}" sconosciuta`)
-    items.push({ name: parts[1], cents, day, category })
+    const times = parts[4] ? Number(parts[4]) : undefined
+    if (times !== undefined && (!Number.isInteger(times) || times < 1 || times > 600)) return fail(`"${parts[4]}" non è un numero di volte valido`)
+    items.push({ name: parts[1], cents, day, category, ...(times ? { times } : {}) })
   })
   // Con i dettagli, l'importo della voce è la loro somma.
   for (const item of items) {

@@ -8,7 +8,13 @@ import { PEOPLE, type PersonKey, type Recurrence } from '../data/model'
 import { useData } from '../data/store'
 import { isSplit } from '../lib/balances'
 import { addDays, today } from '../lib/dates'
+import { countFrom, dueLeft, endAfter } from '../lib/recurrences'
 import { formatEur, parseEur } from '../lib/money'
+
+const ENDS = [['sempre', 'Sempre'], ['volte', 'N volte']] as const
+type EndMode = (typeof ENDS)[number][0]
+
+const fullDate = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('it-IT', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' })
 
 const WHO = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name]] as const
 const smallLabel = { fontSize: 12, fontWeight: 600, color: 'var(--text-2)' } as const
@@ -36,7 +42,23 @@ function RecurrenceForm({ existing }: { existing?: Recurrence }) {
   const [accountId, setAccountId] = useState(existing?.accountId ?? defaultAccount.id)
   const [who, setWho] = useState<PersonKey>(existing?.who ?? me ?? 'jack')
   const [subs, setSubs] = useState(existing?.subs?.map((s) => ({ name: s.name, amount: plain(s.cents) })) ?? [])
+  // Le rate: il numero di volte si conta da domani (o dall'inizio) in avanti; si salva come data dell'ultima scadenza.
+  // Per sempre è la regola; "N volte" (le rate) è facoltativo.
+  const [endMode, setEndMode] = useState<EndMode>(existing?.end ? 'volte' : 'sempre')
+  const [times, setTimes] = useState(existing?.end ? String(dueLeft(existing, today()) || '') : '')
   const [error, setError] = useState<string | null>(null)
+
+  const dayNumber = Number(day)
+  const validDay = Number.isInteger(dayNumber) && dayNumber >= 1 && dayNumber <= 31
+  const start = existing?.start ?? addDays(today(), 1)
+  const timesNumber = Number(times)
+  const resolveEnd = (): { end?: string; error?: string } => {
+    if (endMode === 'sempre') return {}
+    if (!validDay) return { error: 'Scrivi prima il giorno del mese.' }
+    if (!Number.isInteger(timesNumber) || timesNumber < 1 || timesNumber > 600) return { error: 'Le volte devono essere un numero da 1 a 600.' }
+    return { end: endAfter(dayNumber, countFrom({ start }, today()), timesNumber) }
+  }
+  const preview = resolveEnd()
 
   const account = accounts.find((a) => a.id === accountId)
   const hasSubs = subs.length > 0
@@ -44,7 +66,6 @@ function RecurrenceForm({ existing }: { existing?: Recurrence }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    const dayNumber = Number(day)
     if (!name.trim()) return setError('Scrivi il nome della spesa.')
     if (!Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 31) return setError('Il giorno deve essere un numero da 1 a 31.')
     const details = []
@@ -55,6 +76,8 @@ function RecurrenceForm({ existing }: { existing?: Recurrence }) {
     }
     const cents = hasSubs ? subsTotal : parseEur(amount)
     if (!cents) return setError('Scrivi un importo maggiore di zero, ad esempio 34,90.')
+    const ending = resolveEnd()
+    if (ending.error) return setError(ending.error)
     await saveRecurrences([
       {
         id: existing?.id ?? crypto.randomUUID(),
@@ -64,7 +87,8 @@ function RecurrenceForm({ existing }: { existing?: Recurrence }) {
         category,
         accountId,
         who,
-        start: existing?.start ?? addDays(today(), 1),
+        start,
+        end: ending.end,
         subs: hasSubs ? details : undefined,
       },
     ])
@@ -128,6 +152,21 @@ function RecurrenceForm({ existing }: { existing?: Recurrence }) {
           <Segmented options={WHO} value={who} onChange={setWho} />
         </div>
       )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="section-title" style={{ paddingLeft: 4 }}>Ripetizione</div>
+        <Segmented options={ENDS} value={endMode} onChange={setEndMode} />
+        {endMode === 'volte' && (
+          <Field label="Quante volte (ad esempio 12 rate)" id="volte" inputMode="numeric" placeholder="12" value={times} onChange={(e) => setTimes(e.target.value)} />
+        )}
+        <div className="muted" style={{ fontSize: 13, lineHeight: 1.45, paddingLeft: 4 }}>
+          {endMode === 'sempre' && 'Si ripete ogni mese finché non la elimini.'}
+          {endMode === 'volte' &&
+            (preview.end
+              ? `Ultima scadenza: ${fullDate(preview.end)}. ${existing ? 'Le volte si contano da domani: quelle già registrate non contano.' : ''}`
+              : 'Le volte si contano dalla prima scadenza.')}
+        </div>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div className="section-title" style={{ paddingLeft: 4 }}>Dettagli (facoltativi)</div>

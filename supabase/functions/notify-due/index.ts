@@ -71,6 +71,9 @@ Deno.serve(async (req) => {
     .select('household_id')
     .is('deleted_at', null)
     .or(day === lastDay ? `day.gte.${day}` : `day.eq.${day}`)
+    // Solo spese attive oggi: iniziate e non ancora finite (i campi vuoti valgono come "sempre").
+    .or(`starts_on.is.null,starts_on.lte.${date}`)
+    .or(`ends_on.is.null,ends_on.gte.${date}`)
 
   const perHousehold = new Map<string, number>()
   for (const r of due ?? []) perHousehold.set(r.household_id, (perHousehold.get(r.household_id) ?? 0) + 1)

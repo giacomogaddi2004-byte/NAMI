@@ -16,6 +16,9 @@ export interface Row {
   created_by?: string
   /** Solo ricorrenze: giorno di scadenza (in chiaro, per le notifiche). */
   day?: number
+  /** Solo ricorrenze: primo e ultimo giorno (in chiaro, per non avvisare fuori periodo). */
+  starts_on?: string | null
+  ends_on?: string | null
   /** Solo movimenti generati da una spesa fissa. */
   recurrence_id?: string | null
   recurrence_month?: string | null

@@ -147,7 +147,7 @@ export function buildExport(data: ExportData, day: string): ExportFile[] {
 
   add(
     'spese-fisse',
-    ['Spesa', 'Giorno del mese', 'Importo', 'Categoria', 'Conto', 'Dettagli'],
+    ['Spesa', 'Giorno del mese', 'Importo', 'Categoria', 'Conto', 'Dettagli', 'Ultima scadenza'],
     data.recurrences.map((r) => [
       csvText(r.name),
       r.day,
@@ -155,6 +155,7 @@ export function buildExport(data: ExportData, day: string): ExportFile[] {
       CAT[r.category].name,
       csvText(account.get(r.accountId)?.name),
       csvText(r.subs?.map((s) => `${s.name} ${csvMoney(s.cents)}`).join(' | ')),
+      r.end,
     ]),
   )
 

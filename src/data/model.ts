@@ -67,6 +67,8 @@ export interface Recurrence {
   who: PersonKey
   /** Primo giorno dal quale la spesa viene registrata ("AAAA-MM-GG"). */
   start: string
+  /** Ultimo giorno in cui può scadere ("AAAA-MM-GG"): per le rate. Vuoto = non finisce mai. */
+  end?: string
   /** Dettagli di una voce unica (es. i singoli abbonamenti): l'importo è la loro somma. */
   subs?: { name: string; cents: number }[]
 }

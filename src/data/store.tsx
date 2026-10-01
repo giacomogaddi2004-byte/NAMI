@@ -345,7 +345,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const sealRecurrence = useCallback(
     ({ id, accountId, day, ...payload }: Recurrence, deleted = false) =>
-      seal('recurrences', id, payload satisfies RecurrencePayload, { account_id: accountId, day, deleted_at: deleted ? new Date().toISOString() : null }),
+      seal('recurrences', id, payload satisfies RecurrencePayload, {
+        account_id: accountId,
+        day,
+        starts_on: payload.start,
+        ends_on: payload.end ?? null,
+        deleted_at: deleted ? new Date().toISOString() : null,
+      }),
     [seal],
   )
 

@@ -9,6 +9,8 @@ import { OWNER_LABEL, PEOPLE } from '../data/model'
 import { useData } from '../data/store'
 import { computeShares } from '../lib/balances'
 import { budgetTotal } from '../lib/budget'
+import { today } from '../lib/dates'
+import { nextDue } from '../lib/recurrences'
 import { formatEur } from '../lib/money'
 
 const avatar = { width: 44, height: 44, borderRadius: 22, color: '#fff', fontWeight: 700, border: '3px solid #fff' } as const
@@ -131,7 +133,8 @@ export function Impostazioni() {
     const warning = pending > 0 ? `Ci sono ${pending} modifiche non ancora inviate: uscendo andranno perse. ` : ''
     if (await ask(`${warning}Vuoi uscire? Al rientro servirà la frase segreta.`, { confirmLabel: 'Esci', danger: true })) void signOut()
   }
-  const fixedTotal = recurrences.reduce((sum, r) => sum + r.cents, 0)
+  const activeFixed = recurrences.filter((r) => nextDue(r, today()) !== null)
+  const fixedTotal = activeFixed.reduce((sum, r) => sum + r.cents, 0)
 
   return (
     <div className="page page--plain">
@@ -168,7 +171,7 @@ export function Impostazioni() {
 
       <Section title="Gestione">
         <Link to="/spese-fisse" className="list-row">
-          <RowText title="Spese fisse" sub={`${recurrences.length} spese · ${formatEur(fixedTotal)} al mese`} />
+          <RowText title="Spese fisse" sub={`${activeFixed.length} spese · ${formatEur(fixedTotal)} al mese`} />
           {chevron}
         </Link>
         <Link to="/regole" className="list-row">

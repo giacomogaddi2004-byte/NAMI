@@ -6,12 +6,15 @@ import type { Recurrence } from '../data/model'
 import { useData } from '../data/store'
 import { addDays, monthName, today } from '../lib/dates'
 import { formatEur } from '../lib/money'
-import { dueDate, nextDue, occurrenceKey, parseRecurrences } from '../lib/recurrences'
+import { dueDate, dueLeft, endAfter, lastDue, nextDue, occurrenceKey, parseRecurrences } from '../lib/recurrences'
 
-const IMPORT_EXAMPLE = '1; Affitto; 600,00; Casa e bollette\n1; Abbonamenti; 0; Abbonamenti\n-; Film; 8,99\n-; Musica; 10,99'
+const IMPORT_EXAMPLE = '1; Affitto; 600,00; Casa e bollette\n15; Rata telefono; 40; Shopping; 12\n1; Abbonamenti; 0; Abbonamenti\n-; Film; 8,99\n-; Musica; 10,99'
 
 /** "20 ottobre" */
 const dayAndMonth = (date: string) => `${Number(date.slice(8))} ${monthName(date)}`
+
+/** "15 gennaio 2027" */
+const fullDate = (date: string) => `${dayAndMonth(date)} ${date.slice(0, 4)}`
 
 export function SpeseFisse() {
   const { recurrences, occurrences } = useData()
@@ -19,15 +22,26 @@ export function SpeseFisse() {
   const [importing, setImporting] = useState(false)
   const now = today()
 
-  const monthly = recurrences.reduce((sum, r) => sum + r.cents, 0)
-  const upcoming = recurrences.map((rec) => ({ rec, due: nextDue(rec, now) })).sort((a, b) => a.due.localeCompare(b.due))[0]
-  const days = [...new Set(recurrences.map((r) => r.day))]
+  // Le rate finite restano in elenco, ma non contano più nel totale mensile né tra le prossime scadenze.
+  const active = recurrences.filter((r) => nextDue(r, now) !== null)
+  const finished = recurrences.filter((r) => nextDue(r, now) === null)
+  const monthly = active.reduce((sum, r) => sum + r.cents, 0)
+  const upcoming = active.map((rec) => ({ rec, due: nextDue(rec, now)! })).sort((a, b) => a.due.localeCompare(b.due))[0]
+  const days = [...new Set(active.map((r) => r.day))]
 
   const status = (rec: Recurrence) => {
     const due = dueDate(now.slice(0, 7), rec.day)
     return occurrences.has(occurrenceKey(rec.id, due))
       ? { text: `Registrata il ${dayAndMonth(due)}`, done: true }
-      : { text: `In arrivo il ${dayAndMonth(nextDue(rec, now))}`, done: false }
+      : { text: `In arrivo il ${dayAndMonth(nextDue(rec, now)!)}`, done: false }
+  }
+
+  /** Per le rate: quante ne restano e quando finiscono. */
+  const endInfo = (rec: Recurrence) => {
+    const left = dueLeft(rec, now)
+    const last = lastDue(rec)
+    if (left === null || !last) return null
+    return `${left === 1 ? 'Ultima volta' : `Ancora ${left} volte`} · fino al ${fullDate(last)}`
   }
 
   return (
@@ -62,7 +76,7 @@ export function SpeseFisse() {
       )}
 
       {days.map((day) => {
-        const rows = recurrences.filter((r) => r.day === day)
+        const rows = active.filter((r) => r.day === day)
         return (
           <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="row-between" style={{ padding: '4px 4px 0' }}>
@@ -72,6 +86,7 @@ export function SpeseFisse() {
             <div className="list">
               {rows.map((rec) => {
                 const s = status(rec)
+                const info = endInfo(rec)
                 const expanded = open === rec.id
                 return (
                   <div key={rec.id} className="list-row" style={{ display: 'block' }}>
@@ -81,6 +96,7 @@ export function SpeseFisse() {
                         <div className="grow">
                           <div className="tx-name">{rec.name}</div>
                           <div style={{ fontSize: 12, fontWeight: 600, color: s.done ? 'var(--positive)' : 'var(--text-2)' }}>{s.text}</div>
+                          {info && <div className="muted" style={{ fontSize: 12 }}>{info}</div>}
                         </div>
                         <div className="tx-amount">{formatEur(rec.cents)}</div>
                       </Link>
@@ -115,6 +131,27 @@ export function SpeseFisse() {
         )
       })}
 
+      {finished.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="section-title" style={{ paddingLeft: 4 }}>Terminate</div>
+          <div className="list">
+            {finished.map((rec) => {
+              const last = lastDue(rec)
+              return (
+                <Link key={rec.id} to={`/spesa-fissa/${rec.id}`} className="list-row" style={{ opacity: 0.75 }}>
+                  <CatIcon cat={rec.category} box={40} radius={13} icon={21} />
+                  <span className="grow">
+                    <span className="t">{rec.name}</span>
+                    <span className="s">{last ? `Terminata il ${fullDate(last)}` : 'Terminata'}</span>
+                  </span>
+                  <span className="tx-amount">{formatEur(rec.cents)}</span>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <Link to="/spesa-fissa/nuova" className="dashed-btn" style={{ height: 56, borderRadius: 18 }}>+ Aggiungi spesa fissa</Link>
       {importing ? (
         <ImportForm onDone={() => setImporting(false)} />
@@ -141,14 +178,23 @@ function ImportForm({ onDone }: { onDone: () => void }) {
     if (parsed.items.length === 0) return setErrors(['Incolla almeno una riga.'])
     // Si parte da domani: i saldi di oggi tengono già conto di quello che è stato pagato.
     const start = addDays(today(), 1)
-    await saveRecurrences(parsed.items.map((item) => ({ ...item, id: crypto.randomUUID(), accountId, who: me ?? 'jack', start })))
+    await saveRecurrences(
+      parsed.items.map(({ times, ...item }) => ({
+        ...item,
+        id: crypto.randomUUID(),
+        accountId,
+        who: me ?? 'jack',
+        start,
+        end: times ? endAfter(item.day, start, times) : undefined,
+      })),
+    )
     onDone()
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="muted" style={{ fontSize: 13, lineHeight: 1.45 }}>
-        Una spesa per riga: <b>giorno; nome; importo; categoria</b>. Una riga che inizia con “-” è un dettaglio della spesa sopra.
+        Una spesa per riga: <b>giorno; nome; importo; categoria</b>. Per una rata aggiungi alla fine <b>; numero di volte</b>. Una riga che inizia con “-” è un dettaglio della spesa sopra.
       </div>
       <textarea
         aria-label="Elenco delle spese fisse"

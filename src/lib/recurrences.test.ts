@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dueDate, dueDates, lastDayOfMonth, nextDue, nextMonth, occurrenceId, occurrenceKey, parseRecurrences } from './recurrences'
+import { countFrom, dueDate, dueDates, dueLeft, endAfter, lastDayOfMonth, lastDue, nextDue, nextMonth, occurrenceId, occurrenceKey, parseRecurrences } from './recurrences'
 
 describe('scadenze', () => {
   it('conosce l’ultimo giorno di ogni mese, anche negli anni bisestili', () => {
@@ -51,6 +51,53 @@ describe('movimenti da creare', () => {
   })
 })
 
+describe('spese con una fine (rate)', () => {
+  const rata = { day: 15, start: '2026-10-02', end: '2027-01-15' }
+
+  it('trova la data dell’ultima rata contando le volte', () => {
+    expect(endAfter(15, '2026-10-02', 4)).toBe('2027-01-15')
+    expect(endAfter(15, '2026-10-02', 1)).toBe('2026-10-15')
+    expect(endAfter(31, '2026-10-02', 5)).toBe('2027-02-28')
+    expect(endAfter(1, '2026-10-02', 12)).toBe('2027-10-01')
+  })
+
+  it('non genera movimenti oltre la fine', () => {
+    expect(dueDates(rata, '2026-12-20')).toEqual(['2026-10-15', '2026-11-15', '2026-12-15'])
+    expect(dueDates(rata, '2027-06-01')).toEqual(['2026-10-15', '2026-11-15', '2026-12-15', '2027-01-15'])
+  })
+
+  it('la fine è compresa: la scadenza del giorno finale c’è ancora', () => {
+    expect(dueDates({ ...rata, end: '2026-12-15' }, '2026-12-15')).toEqual(['2026-10-15', '2026-11-15', '2026-12-15'])
+    expect(dueDates({ ...rata, end: '2026-12-14' }, '2026-12-20')).toEqual(['2026-10-15', '2026-11-15'])
+  })
+
+  it('dopo l’ultima scadenza non c’è più una prossima', () => {
+    expect(nextDue(rata, '2026-10-20')).toBe('2026-11-15')
+    expect(nextDue(rata, '2026-12-15')).toBe('2027-01-15')
+    expect(nextDue(rata, '2027-01-15')).toBeNull()
+    expect(nextDue(rata, '2028-01-01')).toBeNull()
+    expect(nextDue({ day: 15, start: '2026-10-02' }, '2030-01-01')).toBe('2030-01-15')
+  })
+
+  it('conta quante scadenze restano', () => {
+    expect(dueLeft(rata, '2026-10-20')).toBe(3)
+    expect(dueLeft(rata, '2026-10-01')).toBe(4)
+    expect(dueLeft(rata, '2027-01-15')).toBe(0)
+    expect(dueLeft({ day: 15, start: '2026-10-02' }, '2026-10-20')).toBeNull()
+  })
+
+  it('l’ultima scadenza è quella che cade davvero nel periodo', () => {
+    expect(lastDue(rata)).toBe('2027-01-15')
+    expect(lastDue({ ...rata, end: '2027-01-20' })).toBe('2027-01-15')
+    expect(lastDue({ day: 15, start: '2026-10-02' })).toBeNull()
+  })
+
+  it('le ripetizioni si contano da domani, o dall’inizio se non è ancora arrivato', () => {
+    expect(countFrom({ start: '2026-10-02' }, '2026-10-18')).toBe('2026-10-19')
+    expect(countFrom({ start: '2026-11-01' }, '2026-10-18')).toBe('2026-11-01')
+  })
+})
+
 describe('registrazione unica', () => {
   it('la chiave dipende da spesa e mese, non dal giorno', () => {
     expect(occurrenceKey('abc', '2027-02-28')).toBe('abc:2027-02-01')
@@ -80,6 +127,15 @@ describe('importazione', () => {
       { name: 'Abbonamenti', cents: 1998, day: 1, category: 'abbonamenti', subs: [{ name: 'Film', cents: 899 }, { name: 'Musica', cents: 1099 }] },
       { name: 'Rata macchina', cents: 125000, day: 15, category: 'macchina' },
     ])
+  })
+
+  it('legge le volte facoltative per le rate', () => {
+    const { items, errors } = parseRecurrences('15; Rata telefono; 40; Shopping; 12\n20; Palestra; 30; Salute')
+    expect(errors).toEqual([])
+    expect(items[0].times).toBe(12)
+    expect(items[1].times).toBeUndefined()
+    expect(parseRecurrences('15; Rata; 40; Shopping; 0').errors).toEqual(['Riga 1: "0" non è un numero di volte valido'])
+    expect(parseRecurrences('15; Rata; 40; Shopping; due').errors).toHaveLength(1)
   })
 
   it('segnala le righe sbagliate senza fermarsi', () => {
