@@ -20,6 +20,7 @@ export function Statistiche() {
   return (
     <div className="page">
       <h1>Statistiche</h1>
+      <div className="notice notice--warn">Dati di esempio: questa parte arriva in una delle prossime fasi.</div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', borderRadius: 16, padding: 4 }}>
         <button type="button" aria-label="Mese precedente" style={arrowBtn}>

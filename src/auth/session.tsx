@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { importHouseholdKey, type WrappedKey } from '../lib/crypto'
+import { clearLocalData } from '../data/db'
 import { clearKeys, loadKey, saveKey } from '../lib/keyStore'
 import { errorMessage, supabase } from '../lib/supabase'
 
@@ -23,6 +24,7 @@ interface Session {
   user: User | null
   member: Member | null
   key: CryptoKey | null
+  householdId: string | null
   error: string | null
   retry: () => void
   /** Salva sul dispositivo la chiave appena sbloccata e apre l'app. */
@@ -31,6 +33,9 @@ interface Session {
 }
 
 const Ctx = createContext<Session | null>(null)
+
+/** Solo durante lo sviluppo: `?demo` apre l'app senza account e senza rete, con una chiave usa e getta. */
+export const DEMO = import.meta.env.DEV && new URLSearchParams(location.search).has('demo')
 
 export async function fetchMember(userId: string): Promise<Member | null> {
   const { data, error } = await supabase
@@ -47,10 +52,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading')
   const [member, setMember] = useState<Member | null>(null)
   const [key, setKey] = useState<CryptoKey | null>(null)
+  const [householdId, setHouseholdId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    if (DEMO) {
+      void importHouseholdKey(crypto.getRandomValues(new Uint8Array(32))).then((k) => {
+        setKey(k)
+        setHouseholdId('demo')
+        setStatus('ready')
+      })
+      return
+    }
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null))
     const { data } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null))
     return () => data.subscription.unsubscribe()
@@ -58,7 +72,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const userId = user?.id
   useEffect(() => {
-    if (user === undefined) return
+    if (DEMO || user === undefined) return
     if (!userId) {
       setKey(null)
       setMember(null)
@@ -73,6 +87,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (cancelled) return
       if (local) {
         setKey(local.key)
+        setHouseholdId(local.householdId)
         setStatus('ready')
         return
       }
@@ -97,6 +112,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const k = await importHouseholdKey(raw)
       await saveKey({ userId, householdId, key: k })
       setKey(k)
+      setHouseholdId(householdId)
       setStatus('ready')
     },
     [userId],
@@ -104,13 +120,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await clearKeys()
+    await clearLocalData()
     await supabase.auth.signOut()
   }, [])
 
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
   return (
-    <Ctx.Provider value={{ status, user: user ?? null, member, key, error, retry, unlock, signOut }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ status, user: DEMO ? ({ id: 'demo', email: 'demo@nami.test' } as User) : (user ?? null), member, key, householdId, error, retry, unlock, signOut }}>{children}</Ctx.Provider>
   )
 }
 

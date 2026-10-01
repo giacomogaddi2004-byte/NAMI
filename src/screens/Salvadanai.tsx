@@ -23,6 +23,7 @@ export function Salvadanai() {
   return (
     <div className="page">
       <h1>Salvadanai</h1>
+      <div className="notice notice--warn">Dati di esempio: questa parte arriva in una delle prossime fasi.</div>
 
       <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div>

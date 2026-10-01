@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, ICONS } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { TxRow } from '../components/TxRow'
 import { CAT } from '../data/categories'
-import { DAYS, SPEND_BY_CATEGORY, SUMMARY, TODAY_LABEL } from '../data/mock'
+import { PEOPLE, type View } from '../data/model'
+import { useData } from '../data/store'
+import { availableBalance, computeShares, inView, monthSummary, savingsTotal, taxTotal } from '../lib/balances'
+import { longDay, monthName, shortDay, today } from '../lib/dates'
 import { formatEur, formatEurRounded } from '../lib/money'
 
-const VIEWS = [['jack', 'Jack'], ['fiore', 'Fiore'], ['coppia', 'Coppia']] as const
-type View = (typeof VIEWS)[number][0]
+const VIEWS = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name], ['coppia', 'Coppia']] as const
 
 const WAVE = 'c19 0 19-18 38-18s19 18 38 18 19-18 38-18 19 18 38 18 19-18 38-18 19 18 38 18'
 const R = 52
@@ -16,26 +18,30 @@ const C = 2 * Math.PI * R
 const LEGEND_TOP = 5
 
 export function Home() {
+  const { accounts, txs, pending } = useData()
   const [view, setView] = useState<View>('coppia')
+  const day = today()
 
-  const spent = SPEND_BY_CATEGORY.reduce((a, [, c]) => a + c, 0)
-  const budgetPct = Math.round((spent / SUMMARY.budgetTotal) * 100)
-  const savings = SUMMARY.inPiggyBanks + SUMMARY.deposit
+  const shares = useMemo(() => computeShares(accounts, txs), [accounts, txs])
+  const byId = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
+  const month = useMemo(() => monthSummary(txs, day.slice(0, 7), byId, view), [txs, day, byId, view])
+
+  const available = availableBalance(accounts, shares, view)
+  const savings = savingsTotal(accounts, shares, view)
+  const taxes = taxTotal(accounts, shares, view)
 
   let cum = 0
-  const segments = SPEND_BY_CATEGORY.map(([cat, cents]) => {
-    const len = (cents / spent) * C
+  const segments = month.byCategory.map(([cat, cents]) => {
+    const len = (cents / month.spent) * C
     const seg = { cat, dash: `${Math.max(len - 2, 0).toFixed(2)} ${C.toFixed(2)}`, offset: (-cum).toFixed(2) }
     cum += len
     return seg
   })
-  const others = SPEND_BY_CATEGORY.slice(LEGEND_TOP)
-  const legend = [
-    ...SPEND_BY_CATEGORY.slice(0, LEGEND_TOP).map(([cat, cents]) => ({ name: CAT[cat].name, color: CAT[cat].color, cents })),
-    { name: `Altre ${others.length}`, color: '#B8BDCC', cents: others.reduce((a, [, c]) => a + c, 0) },
-  ]
+  const others = month.byCategory.slice(LEGEND_TOP)
+  const legend = month.byCategory.slice(0, LEGEND_TOP).map(([cat, cents]) => ({ name: CAT[cat].name, color: CAT[cat].color, cents }))
+  if (others.length > 0) legend.push({ name: `Altre ${others.length}`, color: '#B8BDCC', cents: others.reduce((a, [, c]) => a + c, 0) })
 
-  const latest = DAYS.flatMap((d) => d.rows.map((tx) => ({ tx, meta: `${d.short} · ${tx.account}` }))).slice(0, 5)
+  const latest = txs.filter((tx) => inView(tx, byId, view)).slice(0, 5)
 
   return (
     <div className="page">
@@ -49,7 +55,10 @@ export function Home() {
           </div>
           <div>
             <div className="num" style={{ fontWeight: 700, fontSize: 21, letterSpacing: '0.06em' }}>NAMI</div>
-            <div className="muted" style={{ fontSize: 13 }}>{TODAY_LABEL}</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {longDay(day)}
+              {pending > 0 && ` · ${pending} da inviare`}
+            </div>
           </div>
         </div>
         <Link
@@ -71,33 +80,25 @@ export function Home() {
           <path d={`M0 88${WAVE}`} />
         </svg>
         <div style={{ fontSize: 14, fontWeight: 600, color: '#DCE3FF' }}>Saldo disponibile</div>
-        <div className="num" style={{ fontSize: 46, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
-          {formatEur(SUMMARY.available)}
+        <div className="num" style={{ fontSize: available >= 10000000 || available < 0 ? 38 : 46, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.05, whiteSpace: 'nowrap' }}>
+          {available < 0 && '−'}
+          {formatEur(available)}
         </div>
         <div style={{ fontSize: 13, color: '#DCE3FF', maxWidth: 230, lineHeight: 1.4 }}>
-          Conti e contanti, meno {formatEur(SUMMARY.inPiggyBanks)} messi nei salvadanai
+          Conti correnti e contanti. A parte: {formatEur(taxes)} per le tasse
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className="label">Speso a ottobre</div>
-          <div className="num" style={{ fontSize: 25, fontWeight: 700 }}>{formatEur(spent)}</div>
-          <div className="bar" style={{ height: 8 }}>
-            <div style={{ width: `${Math.min(budgetPct, 100)}%`, background: 'var(--plus)' }} />
-          </div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            {budgetPct}% di {formatEurRounded(SUMMARY.budgetTotal)} di budget
-          </div>
+          <div className="label">Speso a {monthName(day)}</div>
+          <div className="num" style={{ fontSize: 25, fontWeight: 700, whiteSpace: 'nowrap' }}>{formatEur(month.spent)}</div>
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>Entrate {formatEur(month.income)}</div>
         </div>
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="label">Totale risparmi</div>
-          <div className="num" style={{ fontSize: 25, fontWeight: 700, color: 'var(--positive)' }}>{formatEur(savings)}</div>
-          <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>
-            Salvadanai {formatEur(SUMMARY.inPiggyBanks)}
-            <br />
-            Conto deposito {formatEur(SUMMARY.deposit)}
-          </div>
+          <div className="num" style={{ fontSize: 25, fontWeight: 700, color: 'var(--positive)', whiteSpace: 'nowrap' }}>{formatEur(savings)}</div>
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>Conto deposito</div>
         </div>
       </div>
 
@@ -106,31 +107,35 @@ export function Home() {
           <div className="card-title">Spese per categoria</div>
           <Link to="/statistiche" className="link">Dettagli</Link>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ position: 'relative', width: 132, height: 132, flexShrink: 0 }}>
-            <svg width="132" height="132" viewBox="0 0 132 132" aria-hidden="true">
-              <g transform="rotate(-90 66 66)" fill="none" strokeWidth="18">
-                <circle cx="66" cy="66" r={R} stroke="#ECEEF3" />
-                {segments.map((s) => (
-                  <circle key={s.cat} cx="66" cy="66" r={R} stroke={CAT[s.cat].color} strokeDasharray={s.dash} strokeDashoffset={s.offset} />
-                ))}
-              </g>
-            </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div className="muted" style={{ fontSize: 11, fontWeight: 600 }}>Totale</div>
-              <div className="num" style={{ fontWeight: 700, fontSize: 17 }}>{formatEurRounded(spent)}</div>
+        {month.spent === 0 ? (
+          <div className="muted" style={{ padding: '8px 0' }}>Nessuna spesa a {monthName(day)}, per ora.</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ position: 'relative', width: 132, height: 132, flexShrink: 0 }}>
+              <svg width="132" height="132" viewBox="0 0 132 132" aria-hidden="true">
+                <g transform="rotate(-90 66 66)" fill="none" strokeWidth="18">
+                  <circle cx="66" cy="66" r={R} stroke="#ECEEF3" />
+                  {segments.map((s) => (
+                    <circle key={s.cat} cx="66" cy="66" r={R} stroke={CAT[s.cat].color} strokeDasharray={s.dash} strokeDashoffset={s.offset} />
+                  ))}
+                </g>
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="muted" style={{ fontSize: 11, fontWeight: 600 }}>Totale</div>
+                <div className="num" style={{ fontWeight: 700, fontSize: 17 }}>{formatEurRounded(month.spent)}</div>
+              </div>
+            </div>
+            <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 }}>
+              {legend.map((l) => (
+                <div key={l.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: l.color, flexShrink: 0 }} />
+                  <span style={{ flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</span>
+                  <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatEur(l.cents)}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 }}>
-            {legend.map((l) => (
-              <div key={l.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: l.color, flexShrink: 0 }} />
-                <span style={{ flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</span>
-                <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatEur(l.cents)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="card" style={{ padding: '18px 18px 8px' }}>
@@ -138,8 +143,11 @@ export function Home() {
           <div className="card-title">Ultimi movimenti</div>
           <Link to="/movimenti" className="link">Vedi tutti</Link>
         </div>
-        {latest.map(({ tx, meta }) => (
-          <TxRow key={tx.name} tx={tx} meta={meta} />
+        {latest.length === 0 && (
+          <div className="muted" style={{ padding: '8px 0 12px' }}>Ancora nessun movimento: tocca “+” per aggiungere il primo.</div>
+        )}
+        {latest.map((tx) => (
+          <TxRow key={tx.id} tx={tx} meta={`${shortDay(tx.date, day)} · ${byId.get(tx.accountId)?.name ?? ''}`} />
         ))}
       </div>
     </div>

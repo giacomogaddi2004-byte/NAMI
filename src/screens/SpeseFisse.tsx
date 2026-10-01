@@ -22,6 +22,8 @@ export function SpeseFisse() {
         <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>Registrate in automatico alla scadenza, dal tuo conto corrente</div>
       </div>
 
+      <div className="notice notice--warn">Dati di esempio: questa parte arriva in una delle prossime fasi.</div>
+
       <div style={{ background: 'var(--primary)', color: '#fff', borderRadius: 22, padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#DCE3FF' }}>Ogni mese</div>

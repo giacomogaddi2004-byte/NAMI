@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { useSession } from '../auth/session'
 import { errorMessage, supabase } from '../lib/supabase'
 import { Icon, ICONS } from '../components/Icon'
-import { ACCOUNTS, FIXED } from '../data/mock'
+import { FIXED } from '../data/mock'
+import { OWNER_LABEL, PEOPLE } from '../data/model'
+import { useData } from '../data/store'
+import { computeShares } from '../lib/balances'
 import { formatEur } from '../lib/money'
 
 const avatar = { width: 44, height: 44, borderRadius: 22, color: '#fff', fontWeight: 700, border: '3px solid #fff' } as const
@@ -65,6 +68,12 @@ function FaceIdRow() {
 
 export function Impostazioni() {
   const { user, signOut } = useSession()
+  const { accounts, txs, me, pending, syncError, syncNow } = useData()
+  const shares = computeShares(accounts, txs)
+  const exit = () => {
+    const warning = pending > 0 ? `Ci sono ${pending} modifiche non ancora inviate: uscendo andranno perse. ` : ''
+    if (window.confirm(`${warning}Vuoi uscire? Al rientro servirà la frase segreta.`)) void signOut()
+  }
   const fixed = FIXED.flatMap((d) => d.rows)
   const fixedTotal = fixed.reduce((a, r) => a + r.cents, 0)
 
@@ -78,31 +87,27 @@ export function Impostazioni() {
 
       <div className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ display: 'flex' }}>
-          <div className="cat-icon" style={{ ...avatar, background: 'var(--primary)' }}>Tu</div>
-          <div className="cat-icon" style={{ ...avatar, background: 'var(--plus)', marginLeft: -12 }}>P</div>
+          <div className="cat-icon" style={{ ...avatar, background: PEOPLE.jack.color }}>J</div>
+          <div className="cat-icon" style={{ ...avatar, background: PEOPLE.fiore.color, marginLeft: -12 }}>F</div>
         </div>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>Tu e il partner</div>
-          <div className="muted" style={{ fontSize: 13 }}>Vedete entrambi tutti i conti</div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>Jack e Fiore</div>
+          <div className="muted" style={{ fontSize: 13 }}>Vedete entrambi tutti i conti{me && ` · tu sei ${PEOPLE[me].name}`}</div>
         </div>
       </div>
 
       <Section title="Conti">
-        {ACCOUNTS.map((a) =>
-          a.to ? (
-            <Link key={a.name} to={a.to} className="list-row">
-              <RowText title={a.name} sub={a.owner} />
-              <div className="tx-amount">{formatEur(a.cents)}</div>
+        {accounts.map((a) => {
+          const s = shares.get(a.id)!
+          const total = s.jack + s.fiore
+          return (
+            <Link key={a.id} to={`/conto/${a.id}`} className="list-row">
+              <RowText title={a.name} sub={OWNER_LABEL[a.owner]} />
+              <div className="tx-amount">{total < 0 && '−'}{formatEur(total)}</div>
               {chevron}
             </Link>
-          ) : (
-            <div key={a.name} className="list-row">
-              <RowText title={a.name} sub={a.owner} />
-              <div className="tx-amount">{formatEur(a.cents)}</div>
-            </div>
-          ),
-        )}
-        <button type="button" className="list-row" style={{ fontWeight: 600, color: 'var(--primary)' }}>+ Aggiungi conto</button>
+          )
+        })}
       </Section>
 
       <Section title="Gestione">
@@ -119,12 +124,22 @@ export function Impostazioni() {
           {chevron}
         </Link>
         <button type="button" className="list-row">
-          <RowText title="Comando Apple Pay" sub="Attivo su 2 iPhone" subStyle={{ color: 'var(--positive)', fontWeight: 600 }} />
+          <RowText title="Comando Apple Pay" sub="Arriva con la Fase 8" />
           {chevron}
         </button>
       </Section>
 
       <Section title="Sicurezza e dati">
+        <div className="list-row">
+          <RowText
+            title="Sincronizzazione"
+            sub={syncError ?? (pending > 0 ? `${pending} modifiche da inviare` : 'Tutto salvato sul server')}
+            subStyle={syncError || pending > 0 ? { color: '#8A4B00', fontWeight: 600 } : undefined}
+          />
+          <button type="button" onClick={syncNow} className="link" style={{ height: 44, padding: '0 4px', border: 0, background: 'transparent', flexShrink: 0 }}>
+            Aggiorna
+          </button>
+        </div>
         <FaceIdRow />
         <Link to="/invita" className="list-row">
           <RowText title="Invita il partner" sub="Codice monouso, valido 15 minuti" />
@@ -142,13 +157,13 @@ export function Impostazioni() {
           <RowText title="Esporta tutto in CSV" sub="Backup leggibile, da tenere al sicuro" />
           <Icon d={ICONS.download} size={20} color="#2B50E0" width={2.2} />
         </button>
-        <button type="button" className="list-row" onClick={signOut}>
+        <button type="button" className="list-row" onClick={exit}>
           <RowText title="Esci" sub={`${user?.email ?? ''} · al rientro servirà la frase segreta`} />
         </button>
       </Section>
 
       <div className="muted" style={{ textAlign: 'center', fontSize: 12 }}>
-        NAMI {__APP_VERSION__} · versione di prova con dati di esempio
+        NAMI {__APP_VERSION__} · Spese fisse, Salvadanai e Statistiche sono ancora di esempio
       </div>
     </div>
   )

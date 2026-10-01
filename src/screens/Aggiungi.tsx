@@ -1,39 +1,132 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, type FormEvent } from 'react'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { ErrorBox } from '../auth/screens'
 import { CatIcon } from '../components/Icon'
 import { Segmented } from '../components/Segmented'
 import { CAT, EXPENSE_CATEGORIES, INCOME_CATEGORIES, type CategoryKey } from '../data/categories'
+import { PEOPLE, type Account, type PersonKey, type Tx, type TxType } from '../data/model'
+import { useData } from '../data/store'
+import { isSplit } from '../lib/balances'
+import { today } from '../lib/dates'
 import { formatEur, parseEur, TAX_PERCENT, taxShare } from '../lib/money'
 
 const TYPES = [['uscita', 'Uscita'], ['entrata', 'Entrata'], ['giroconto', 'Giroconto']] as const
-type TxType = (typeof TYPES)[number][0]
+const WHO = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name]] as const
 
 const SAVE_LABEL: Record<TxType, string> = { uscita: 'Salva spesa', entrata: 'Salva entrata', giroconto: 'Salva giroconto' }
-const MERCHANT_LABEL: Record<TxType, string> = { uscita: 'Esercente', entrata: 'Da chi', giroconto: 'Descrizione' }
+const MERCHANT_LABEL: Record<TxType, string> = { uscita: 'Esercente', entrata: 'Da chi', giroconto: 'Descrizione (facoltativa)' }
 
 const smallLabel = { fontSize: 12, fontWeight: 600, color: 'var(--text-2)' } as const
 
+function AccountSelect({ label, value, onChange, accounts }: { label: string; value: string; onChange: (id: string) => void; accounts: Account[] }) {
+  return (
+    <label className="field-btn" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
+      <span style={smallLabel}>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="plain-select">
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>{a.name}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+/** Nei conti di entrambi bisogna dire di chi è la quota. */
+function WhoSelect({ label, value, onChange }: { label: string; value: PersonKey; onChange: (who: PersonKey) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={smallLabel}>{label}</div>
+      <Segmented options={WHO} value={value} onChange={onChange} />
+    </div>
+  )
+}
+
+/** Nuovo movimento, oppure modifica di uno esistente (`/movimento/:id`). */
 export function Aggiungi() {
-  const [type, setType] = useState<TxType>('uscita')
-  const [amount, setAmount] = useState('42,80')
-  const [merchant, setMerchant] = useState('Esselunga')
-  const [expenseCat, setExpenseCat] = useState<CategoryKey>('supermercato')
-  const [incomeCat, setIncomeCat] = useState<CategoryKey>('lavoro')
+  const { id } = useParams()
+  const { txs } = useData()
+  const existing = id ? txs.find((t) => t.id === id) : undefined
+  // Movimento cancellato nel frattempo, magari dal partner.
+  if (id && !existing) return <Navigate to="/movimenti" replace />
+  return <TxForm key={id ?? 'nuovo'} existing={existing} />
+}
+
+function TxForm({ existing }: { existing?: Tx }) {
+  const navigate = useNavigate()
+  const { accounts, me, saveTx, deleteTx } = useData()
+  const mine = accounts.find((a) => a.owner === me) ?? accounts[0]
+
+  const [type, setType] = useState<TxType>(existing?.type ?? 'uscita')
+  const [amount, setAmount] = useState(existing ? formatEur(existing.cents).replace(' €', '') : '')
+  const [merchant, setMerchant] = useState(existing?.merchant ?? '')
+  const [expenseCat, setExpenseCat] = useState<CategoryKey>(existing?.type === 'uscita' ? (existing.category ?? 'altro') : 'supermercato')
+  const [incomeCat, setIncomeCat] = useState<CategoryKey>(existing?.type === 'entrata' ? (existing.category ?? 'altro') : 'lavoro')
+  const [accountId, setAccountId] = useState(existing?.accountId ?? mine.id)
+  const [toAccountId, setToAccountId] = useState(existing?.toAccountId ?? accounts.find((a) => a.id !== mine.id)?.id ?? mine.id)
+  const [who, setWho] = useState<PersonKey>(existing?.who ?? me ?? 'jack')
+  const [toWho, setToWho] = useState<PersonKey>(existing?.toWho ?? existing?.who ?? me ?? 'jack')
+  const [date, setDate] = useState(existing?.date ?? today())
+  // Finché non lo tocchi, l'interruttore Fattura è acceso solo per la categoria Lavoro.
+  const [invoiceChoice, setInvoiceChoice] = useState<boolean | null>(existing?.type === 'entrata' ? !!existing.invoice : null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const isIncome = type === 'entrata'
+  const isTransfer = type === 'giroconto'
   const cents = parseEur(amount)
-  // Finché non lo tocchi, l'interruttore Fattura è acceso solo per la categoria Lavoro.
-  const [invoiceChoice, setInvoiceChoice] = useState<boolean | null>(null)
   const invoice = invoiceChoice ?? incomeCat === 'lavoro'
   const cats = isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
   const picked = isIncome ? incomeCat : expenseCat
   const pick = isIncome ? setIncomeCat : setExpenseCat
 
+  const from = accounts.find((a) => a.id === accountId)
+  const to = accounts.find((a) => a.id === toAccountId)
+  const fromSplit = !!from && isSplit(from)
+  const toSplit = isTransfer && !!to && isSplit(to)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!cents) return setError('Scrivi un importo maggiore di zero, ad esempio 12,50.')
+    if (!date) return setError('Scegli una data.')
+    const sameQuota = (fromSplit ? who : null) === (toSplit ? toWho : null)
+    if (isTransfer && accountId === toAccountId && sameQuota) return setError('Scegli due conti diversi.')
+    setBusy(true)
+    await saveTx({
+      id: existing?.id ?? crypto.randomUUID(),
+      type,
+      cents,
+      date,
+      accountId,
+      toAccountId: isTransfer ? toAccountId : undefined,
+      merchant: merchant.trim(),
+      category: isTransfer ? undefined : picked,
+      // Nei conti di un solo titolare la quota è sempre la sua.
+      who: fromSplit || !from || from.owner === 'entrambi' ? who : from.owner,
+      toWho: toSplit ? toWho : undefined,
+      invoice: isIncome ? invoice : undefined,
+    })
+    navigate(-1)
+  }
+
+  const remove = async () => {
+    if (!existing || !window.confirm('Eliminare questo movimento?')) return
+    setBusy(true)
+    await deleteTx(existing.id)
+    navigate(-1)
+  }
+
   return (
-    <div className="page page--plain">
+    <form className="page page--plain" onSubmit={submit}>
       <div style={{ display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr) 72px', alignItems: 'center' }}>
-        <Link to="/" className="back">Annulla</Link>
-        <div className="card-title" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>Nuovo movimento</div>
+        <button type="button" className="back" onClick={() => navigate(-1)} style={{ border: 0, background: 'transparent', padding: 0, color: 'var(--primary)' }}>
+          Annulla
+        </button>
+        <div className="card-title" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{existing ? 'Modifica' : 'Nuovo movimento'}</div>
+        {existing && (
+          <button type="button" onClick={remove} disabled={busy} style={{ height: 44, border: 0, background: 'transparent', padding: 0, textAlign: 'right', fontSize: 16, fontWeight: 600, color: 'var(--over)' }}>
+            Elimina
+          </button>
+        )}
       </div>
 
       <Segmented options={TYPES} value={type} onChange={setType} />
@@ -45,6 +138,8 @@ export function Aggiungi() {
             id="importo"
             type="text"
             inputMode="decimal"
+            placeholder="0,00"
+            autoFocus={!existing}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="num"
@@ -65,22 +160,19 @@ export function Aggiungi() {
         />
       </div>
 
-      {type === 'giroconto' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>Sposta tra i tuoi conti</div>
-          {[['Da', 'Conto corrente'], ['A', 'Conto spese di coppia']].map(([label, account]) => (
-            <button key={label} type="button" className="field-btn" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', fontSize: 16, fontWeight: 600 }}>
-              <span className="muted" style={{ fontSize: 13 }}>{label}</span>
-              <span>{account}</span>
-            </button>
-          ))}
+      {isTransfer ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <AccountSelect label="Da" value={accountId} onChange={setAccountId} accounts={accounts} />
+          {fromSplit && <WhoSelect label="Dalla quota di" value={who} onChange={setWho} />}
+          <AccountSelect label="A" value={toAccountId} onChange={setToAccountId} accounts={accounts} />
+          {toSplit && <WhoSelect label="Alla quota di" value={toWho} onChange={setToWho} />}
           <div className="muted" style={{ fontSize: 13, lineHeight: 1.4 }}>Un giroconto non conta né come spesa né come entrata.</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="row-between">
             <div style={{ fontSize: 14, fontWeight: 700 }}>Categoria</div>
-            <div style={smallLabel}>{isIncome ? 'Entrate variabili' : `Proposta per ${merchant}`}</div>
+            {isIncome && <div style={smallLabel}>Entrate variabili</div>}
           </div>
           <div className="cat-grid">
             {cats.map((k) => {
@@ -106,7 +198,7 @@ export function Aggiungi() {
                 <div style={{ fontSize: 15, fontWeight: 700 }}>Fattura</div>
                 <div style={{ ...smallLabel, color: invoice ? 'var(--positive)' : 'var(--text-2)' }}>
                   {invoice
-                    ? `${TAX_PERCENT}% al conto tasse${cents !== null ? `: ${formatEur(taxShare(cents))}` : ''}`
+                    ? `${TAX_PERCENT}% al conto tasse${cents ? `: ${formatEur(taxShare(cents))}` : ''}`
                     : 'Incasso senza fattura: niente al conto tasse'}
                 </div>
               </div>
@@ -127,21 +219,18 @@ export function Aggiungi() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-        {type !== 'giroconto' && (
-          <button type="button" className="field-btn">
-            <span style={{ ...smallLabel, display: 'block' }}>Conto</span>
-            <span style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>Conto di coppia</span>
-          </button>
-        )}
-        <button type="button" className="field-btn">
-          <span style={{ ...smallLabel, display: 'block' }}>Data</span>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>Oggi, 18 ottobre</span>
-        </button>
+      <div style={{ display: 'grid', gridTemplateColumns: isTransfer ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        {!isTransfer && <AccountSelect label="Conto" value={accountId} onChange={setAccountId} accounts={accounts} />}
+        <label className="field-btn" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
+          <span style={smallLabel}>Data</span>
+          <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} className="plain-select" />
+        </label>
       </div>
+      {!isTransfer && fromSplit && <WhoSelect label={isIncome ? 'Nella quota di' : 'Dalla quota di'} value={who} onChange={setWho} />}
 
+      <ErrorBox>{error}</ErrorBox>
       <div style={{ flexGrow: 1 }} />
-      <Link to="/" className="primary-btn">{SAVE_LABEL[type]}</Link>
-    </div>
+      <button type="submit" className="primary-btn" disabled={busy}>{SAVE_LABEL[type]}</button>
+    </form>
   )
 }

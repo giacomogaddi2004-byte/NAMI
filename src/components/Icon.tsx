@@ -16,6 +16,8 @@ export const ICONS = {
   down: 'M6 9l6 6 6-6',
   laptop: 'M5 6a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v9H5zM3 18h18M10 15.5h4',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  swap: 'M4 8h15l-3-3M20 16H5l3 3',
+  trash: 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13',
 } as const
 
 interface IconProps {
