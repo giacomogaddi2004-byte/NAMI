@@ -13,6 +13,7 @@ import { Movimenti } from './screens/Movimenti'
 import { Regole } from './screens/Regole'
 import { Saldo } from './screens/Saldo'
 import { Salvadanai } from './screens/Salvadanai'
+import { SpesaFissa } from './screens/SpesaFissa'
 import { SpeseFisse } from './screens/SpeseFisse'
 import { Statistiche } from './screens/Statistiche'
 
@@ -46,6 +47,7 @@ export function App() {
         <Route path="/aggiungi" element={<Aggiungi />} />
         <Route path="/impostazioni" element={<Impostazioni />} />
         <Route path="/spese-fisse" element={<SpeseFisse />} />
+        <Route path="/spesa-fissa/:id" element={<SpesaFissa />} />
         <Route path="/movimento/:id" element={<Aggiungi />} />
         <Route path="/conto/:id" element={<Conto />} />
         <Route path="/saldo/:view" element={<Saldo />} />

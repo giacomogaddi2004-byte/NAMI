@@ -8,13 +8,14 @@ import { useData } from '../data/store'
 import { dayTitle, today } from '../lib/dates'
 import { formatEur, formatSigned } from '../lib/money'
 
-type Filter = 'tutti' | 'controllare' | 'uscite' | 'entrate' | 'giroconti'
+type Filter = 'tutti' | 'controllare' | 'uscite' | 'entrate' | 'fisse' | 'giroconti'
 
 const KEEP: Record<Filter, (tx: Tx) => boolean> = {
   tutti: () => true,
   controllare: (tx) => !!tx.review,
   uscite: (tx) => tx.type === 'uscita',
   entrate: (tx) => tx.type === 'entrata',
+  fisse: (tx) => !!tx.recurrenceId,
   giroconti: (tx) => tx.type === 'giroconto',
 }
 
@@ -33,6 +34,7 @@ export function Movimenti() {
     ...(toReview > 0 || filter === 'controllare' ? [['controllare', `Da controllare · ${toReview}`] as [Filter, string]] : []),
     ['uscite', 'Uscite'],
     ['entrate', 'Entrate'],
+    ['fisse', 'Fisse'],
     ['giroconti', 'Giroconti'],
   ]
 

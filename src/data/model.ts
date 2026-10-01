@@ -48,7 +48,27 @@ export interface Tx {
   review?: boolean
   /** Giroconto automatico verso il conto tasse: id dell'entrata che l'ha generato. */
   taxOf?: string
+  /** Movimento creato da una spesa fissa: quale, e per quale mese ("AAAA-MM-01"). */
+  recurrenceId?: string
+  recurrenceMonth?: string
   createdBy?: string
+}
+
+/** Spesa fissa mensile, registrata da sola alla scadenza. */
+export interface Recurrence {
+  id: string
+  name: string
+  cents: number
+  /** Giorno del mese, da 1 a 31. */
+  day: number
+  category: CategoryKey
+  accountId: string
+  /** Di chi è la quota, se il conto è di entrambi. */
+  who: PersonKey
+  /** Primo giorno dal quale la spesa viene registrata ("AAAA-MM-GG"). */
+  start: string
+  /** Dettagli di una voce unica (es. i singoli abbonamenti): l'importo è la loro somma. */
+  subs?: { name: string; cents: number }[]
 }
 
 /** Regola "esercente → categoria" scelta dalla coppia. */

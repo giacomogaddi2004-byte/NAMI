@@ -119,6 +119,8 @@ function TxForm({ existing }: { existing?: Tx }) {
       toWho: toSplit ? toWho : undefined,
       invoice: isIncome ? invoice : undefined,
       review: type === 'uscita' && !expensePick && !suggested ? true : undefined,
+      recurrenceId: existing?.recurrenceId,
+      recurrenceMonth: existing?.recurrenceMonth,
     })
     await learnRule(id)
     navigate(-1)

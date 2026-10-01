@@ -6,7 +6,9 @@ import { decryptJson, encryptJson } from '../lib/crypto'
 import { TAX_PERCENT, taxShare } from '../lib/money'
 import { errorMessage, supabase } from '../lib/supabase'
 import { db, PRIMARY_KEY, rowKey, TABLES, type OutboxItem, type Row, type TableName } from './db'
-import type { Account, PersonKey, Rule, Settings, Tx } from './model'
+import type { Account, PersonKey, Recurrence, Rule, Settings, Tx } from './model'
+import { today } from '../lib/dates'
+import { dueDates, occurrenceId, occurrenceKey } from '../lib/recurrences'
 
 const SYNC_EVERY_MS = 60_000
 const PAGE = 1000
@@ -26,6 +28,10 @@ interface Data {
   txs: Tx[]
   /** Regole esercente → categoria della coppia. */
   rules: Rule[]
+  /** Spese fisse, in ordine di giorno. */
+  recurrences: Recurrence[]
+  /** Registrazioni già fatte (anche se poi eliminate): chiavi `occurrenceKey`. */
+  occurrences: Set<string>
   saveSettings: (settings: Settings) => Promise<void>
   saveAccounts: (accounts: Account[]) => Promise<void>
   /** Salva un movimento; per le entrate con fattura aggiorna anche il giroconto verso il conto tasse. */
@@ -35,6 +41,9 @@ interface Data {
   saveTxs: (list: Tx[]) => Promise<void>
   saveRule: (rule: Rule) => Promise<void>
   deleteRule: (rule: Rule) => Promise<void>
+  saveRecurrences: (list: Recurrence[]) => Promise<void>
+  /** Elimina la spesa fissa; i movimenti già registrati restano. */
+  deleteRecurrence: (rec: Recurrence) => Promise<void>
   syncNow: () => void
 }
 
@@ -42,7 +51,8 @@ const Ctx = createContext<Data | null>(null)
 
 type AccountPayload = Omit<Account, 'id'>
 type RulePayload = Omit<Rule, 'id'>
-type TxPayload = Omit<Tx, 'id' | 'date' | 'accountId' | 'toAccountId' | 'createdBy'>
+type RecurrencePayload = Omit<Recurrence, 'id' | 'accountId' | 'day'>
+type TxPayload = Omit<Tx, 'id' | 'date' | 'accountId' | 'toAccountId' | 'createdBy' | 'recurrenceId' | 'recurrenceMonth'>
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const { key, householdId, user } = useSession()
@@ -54,6 +64,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [txs, setTxs] = useState<Tx[]>([])
   const [rules, setRules] = useState<Rule[]>([])
+  const [recurrences, setRecurrences] = useState<Recurrence[]>([])
+  const [occurrences, setOccurrences] = useState<Set<string>>(new Set())
+  const generating = useRef(false)
   const running = useRef(false)
   const again = useRef(false)
 
@@ -68,10 +81,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return null
       }
     }
-    const [accountRows, txRows, ruleRows, settingsRow] = await Promise.all([
+    const [accountRows, txRows, ruleRows, recurrenceRows, settingsRow] = await Promise.all([
       db.accounts.toArray(),
       db.transactions.toArray(),
       db.rules.toArray(),
+      db.recurrences.toArray(),
       db.settings.get(householdId),
     ])
 
@@ -83,8 +97,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const nextTxs: Tx[] = []
     for (const row of txRows) {
       const p = row.deleted_at ? null : await open<TxPayload>('transactions', row)
-      if (p) nextTxs.push({ ...p, id: row.id!, date: row.date!, accountId: row.account_id!, toAccountId: row.to_account_id ?? undefined, createdBy: row.created_by })
+      if (p) {
+        nextTxs.push({
+          ...p,
+          id: row.id!,
+          date: row.date!,
+          accountId: row.account_id!,
+          toAccountId: row.to_account_id ?? undefined,
+          createdBy: row.created_by,
+          recurrenceId: row.recurrence_id ?? undefined,
+          recurrenceMonth: row.recurrence_month ?? undefined,
+        })
+      }
     }
+    // Anche i movimenti eliminati contano: una spesa fissa cancellata a mano non deve ricomparire.
+    setOccurrences(new Set(txRows.filter((r) => r.recurrence_id && r.recurrence_month).map((r) => `${r.recurrence_id}:${r.recurrence_month}`)))
+    const nextRecurrences: Recurrence[] = []
+    for (const row of recurrenceRows) {
+      const p = row.deleted_at ? null : await open<RecurrencePayload>('recurrences', row)
+      if (p) nextRecurrences.push({ ...p, id: row.id!, accountId: row.account_id!, day: row.day! })
+    }
+    setRecurrences(nextRecurrences.sort((a, b) => a.day - b.day || a.name.localeCompare(b.name, 'it')))
     const nextRules: Rule[] = []
     for (const row of ruleRows) {
       const p = row.deleted_at ? null : await open<RulePayload>('rules', row)
@@ -167,7 +200,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   /** Scrive in locale, mette in coda e prova subito a inviare. */
   const write = useCallback(
     async (items: OutboxItem[]) => {
-      await db.transaction('rw', [db.accounts, db.transactions, db.settings, db.rules, db.outbox], async () => {
+      await db.transaction('rw', [db.accounts, db.transactions, db.settings, db.rules, db.recurrences, db.outbox], async () => {
         for (const item of items) {
           await db.table<Row, string>(item.table).put(item.row)
           await db.outbox.add(item)
@@ -192,11 +225,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const sealTx = useCallback(
     (tx: Tx, deleted = false) => {
-      const { id, date, accountId, toAccountId, createdBy: _c, ...payload } = tx
+      const { id, date, accountId, toAccountId, createdBy: _c, recurrenceId, recurrenceMonth, ...payload } = tx
       return seal('transactions', id, payload satisfies TxPayload, {
         account_id: accountId,
         to_account_id: toAccountId ?? null,
         date,
+        recurrence_id: recurrenceId ?? null,
+        recurrence_month: recurrenceMonth ?? null,
         deleted_at: deleted ? new Date().toISOString() : null,
       })
     },
@@ -265,10 +300,56 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [seal, write],
   )
 
+  const sealRecurrence = useCallback(
+    ({ id, accountId, day, ...payload }: Recurrence, deleted = false) =>
+      seal('recurrences', id, payload satisfies RecurrencePayload, { account_id: accountId, day, deleted_at: deleted ? new Date().toISOString() : null }),
+    [seal],
+  )
+
+  const saveRecurrences = useCallback(async (list: Recurrence[]) => write(await Promise.all(list.map((r) => sealRecurrence(r)))), [sealRecurrence, write])
+
+  const deleteRecurrence = useCallback(async (rec: Recurrence) => write([await sealRecurrence(rec, true)]), [sealRecurrence, write])
+
+  // Spese fisse: alla prima apertura dal giorno di scadenza in poi crea i movimenti mancanti.
+  // Aspetta il primo scambio con il server (o che fallisca) per sapere cosa ha già registrato il partner.
+  useEffect(() => {
+    if (!loaded || !(synced || syncError) || generating.current) return
+    const day = today()
+    const missing = recurrences.flatMap((rec) => dueDates(rec, day).filter((due) => !occurrences.has(occurrenceKey(rec.id, due))).map((due) => ({ rec, due })))
+    if (missing.length === 0) return
+    generating.current = true
+    void (async () => {
+      try {
+        const items = []
+        for (const { rec, due } of missing) {
+          const account = accounts.find((a) => a.id === rec.accountId)
+          if (!account) continue
+          items.push(
+            await sealTx({
+              id: await occurrenceId(rec.id, due),
+              type: 'uscita',
+              cents: rec.cents,
+              date: due,
+              accountId: rec.accountId,
+              merchant: rec.name,
+              category: rec.category,
+              who: account.owner === 'entrambi' ? rec.who : account.owner,
+              recurrenceId: rec.id,
+              recurrenceMonth: `${due.slice(0, 7)}-01`,
+            }),
+          )
+        }
+        if (items.length > 0) await write(items)
+      } finally {
+        generating.current = false
+      }
+    })()
+  }, [loaded, synced, syncError, recurrences, occurrences, accounts, sealTx, write])
+
   const me = (user && settings?.people[user.id]) || null
   const value = useMemo<Data>(
-    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, rules, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, syncNow: sync }),
-    [loaded, synced, syncError, pending, me, settings, accounts, txs, rules, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, sync],
+    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, syncNow: sync }),
+    [loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, sync],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

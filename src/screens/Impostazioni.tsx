@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useSession } from '../auth/session'
 import { errorMessage, supabase } from '../lib/supabase'
 import { Icon, ICONS } from '../components/Icon'
-import { FIXED } from '../data/mock'
 import { OWNER_LABEL, PEOPLE } from '../data/model'
 import { useData } from '../data/store'
 import { computeShares } from '../lib/balances'
@@ -68,14 +67,13 @@ function FaceIdRow() {
 
 export function Impostazioni() {
   const { user, signOut } = useSession()
-  const { accounts, txs, rules, me, pending, syncError, syncNow } = useData()
+  const { accounts, txs, rules, recurrences, me, pending, syncError, syncNow } = useData()
   const shares = computeShares(accounts, txs)
   const exit = () => {
     const warning = pending > 0 ? `Ci sono ${pending} modifiche non ancora inviate: uscendo andranno perse. ` : ''
     if (window.confirm(`${warning}Vuoi uscire? Al rientro servirà la frase segreta.`)) void signOut()
   }
-  const fixed = FIXED.flatMap((d) => d.rows)
-  const fixedTotal = fixed.reduce((a, r) => a + r.cents, 0)
+  const fixedTotal = recurrences.reduce((sum, r) => sum + r.cents, 0)
 
   return (
     <div className="page page--plain">
@@ -112,7 +110,7 @@ export function Impostazioni() {
 
       <Section title="Gestione">
         <Link to="/spese-fisse" className="list-row">
-          <RowText title="Spese fisse" sub={`${fixed.length} spese · ${formatEur(fixedTotal)} al mese`} />
+          <RowText title="Spese fisse" sub={`${recurrences.length} spese · ${formatEur(fixedTotal)} al mese`} />
           {chevron}
         </Link>
         <Link to="/regole" className="list-row">
@@ -163,7 +161,7 @@ export function Impostazioni() {
       </Section>
 
       <div className="muted" style={{ textAlign: 'center', fontSize: 12 }}>
-        NAMI {__APP_VERSION__} · Spese fisse, Salvadanai e Statistiche sono ancora di esempio
+        NAMI {__APP_VERSION__} · Salvadanai e Statistiche sono ancora di esempio
       </div>
     </div>
   )

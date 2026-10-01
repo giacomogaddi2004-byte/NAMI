@@ -34,6 +34,7 @@ export function TxRow({ tx, meta }: { tx: Tx; meta: string }) {
           {txAmount(tx)}
         </div>
         {tx.taxOf && <div className="tag">Tasse</div>}
+        {tx.recurrenceId && <div className="tag">Fissa</div>}
         {tx.review && <div className="tag" style={{ background: '#FFF1D6', color: '#8A4B00' }}>Da controllare</div>}
       </div>
     </Link>
