@@ -1,5 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useSession } from '../auth/session'
+import { errorMessage, supabase } from '../lib/supabase'
 import { Icon, ICONS } from '../components/Icon'
 import { ACCOUNTS, FIXED } from '../data/mock'
 import { formatEur } from '../lib/money'
@@ -26,7 +28,43 @@ function RowText({ title, sub, subStyle }: { title: string; sub: string; subStyl
 
 const chevron = <Icon d={ICONS.right} size={18} color="#8A90A6" width={2.2} />
 
+/** Registra una passkey su questo dispositivo, per entrare con Face ID. */
+function FaceIdRow() {
+  const [count, setCount] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.passkey.list().then(({ data }) => setCount(data?.length ?? 0))
+  }, [])
+
+  const register = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { error } = await supabase.auth.registerPasskey()
+      if (error) throw error
+      setCount((n) => (n ?? 0) + 1)
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sub = error ?? (count === null ? 'Controllo…' : count > 0 ? `Attivo · ${count} ${count === 1 ? 'dispositivo' : 'dispositivi'}` : 'Non ancora attivo su questo iPhone')
+  return (
+    <div className="list-row">
+      <RowText title="Accesso con Face ID" sub={sub} subStyle={error ? { color: 'var(--over)', fontWeight: 600 } : count ? { color: 'var(--positive)', fontWeight: 600 } : undefined} />
+      <button type="button" onClick={register} disabled={busy} className="link" style={{ height: 44, padding: '0 4px', border: 0, background: 'transparent', flexShrink: 0 }}>
+        {busy ? '…' : count ? 'Aggiungi' : 'Attiva'}
+      </button>
+    </div>
+  )
+}
+
 export function Impostazioni() {
+  const { user, signOut } = useSession()
   const fixed = FIXED.flatMap((d) => d.rows)
   const fixedTotal = fixed.reduce((a, r) => a + r.cents, 0)
 
@@ -87,12 +125,11 @@ export function Impostazioni() {
       </Section>
 
       <Section title="Sicurezza e dati">
-        <div className="list-row">
-          <RowText title="Accesso con Face ID" sub="Passkey su questo iPhone" />
-          <button type="button" role="switch" aria-checked="true" aria-label="Accesso con Face ID" style={{ width: 52, height: 32, borderRadius: 16, border: 0, background: '#1F9D55', position: 'relative', padding: 0 }}>
-            <span style={{ position: 'absolute', top: 3, right: 3, width: 26, height: 26, borderRadius: 13, background: '#fff' }} />
-          </button>
-        </div>
+        <FaceIdRow />
+        <Link to="/invita" className="list-row">
+          <RowText title="Invita il partner" sub="Codice monouso, valido 15 minuti" />
+          {chevron}
+        </Link>
         <div className="list-row">
           <RowText title="Cifratura totale" sub="I dati lasciano il telefono già cifrati" />
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--positive)', background: '#DFF3E7', borderRadius: 8, padding: '4px 8px' }}>Attiva</span>
@@ -104,6 +141,9 @@ export function Impostazioni() {
         <button type="button" className="list-row">
           <RowText title="Esporta tutto in CSV" sub="Backup leggibile, da tenere al sicuro" />
           <Icon d={ICONS.download} size={20} color="#2B50E0" width={2.2} />
+        </button>
+        <button type="button" className="list-row" onClick={signOut}>
+          <RowText title="Esci" sub={`${user?.email ?? ''} · al rientro servirà la frase segreta`} />
         </button>
       </Section>
 

@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { Gate } from './auth/screens'
 import { TabBar } from './components/TabBar'
+import { Invita } from './screens/Invita'
 import { Aggiungi } from './screens/Aggiungi'
 import { ContoTasse } from './screens/ContoTasse'
 import { Home } from './screens/Home'
@@ -27,6 +29,7 @@ export function App() {
 
   return (
     <div className="app">
+      <Gate>
       <Routes>
         <Route element={<WithTabBar />}>
           <Route path="/" element={<Home />} />
@@ -38,8 +41,10 @@ export function App() {
         <Route path="/impostazioni" element={<Impostazioni />} />
         <Route path="/spese-fisse" element={<SpeseFisse />} />
         <Route path="/conto-tasse" element={<ContoTasse />} />
+        <Route path="/invita" element={<Invita />} />
         <Route path="*" element={<Home />} />
       </Routes>
+      </Gate>
     </div>
   )
 }
