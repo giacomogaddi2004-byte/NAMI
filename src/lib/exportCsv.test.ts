@@ -63,7 +63,7 @@ describe('esportazione completa', () => {
   it('i movimenti sono in ordine di data, con segno e nomi leggibili', () => {
     const lines = byName('movimenti').content.trim().split('\r\n')
     expect(lines).toHaveLength(4)
-    expect(lines[1]).toBe("2026-10-05;Uscita;-42,80;'=BAD();Supermercato;Conto corrente;;Jack;;sì;;")
+    expect(lines[1]).toBe("2026-10-05;Uscita;-42,80;'=BAD();Spesa;Conto corrente;;Jack;;sì;;")
     expect(lines[2]).toBe('2026-10-16;Entrata;1250,00;"Cliente; Rossi";Lavoro;Conto corrente;;Jack;sì;;;Jack')
     expect(lines[3]).toContain('Giroconto;375,00;')
     expect(lines[3]).toContain('Conto corrente;Conto tasse')

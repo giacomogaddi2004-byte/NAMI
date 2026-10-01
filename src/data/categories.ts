@@ -23,7 +23,7 @@ export interface Category {
 }
 
 export const CAT: Record<CategoryKey, Category> = {
-  supermercato: { name: 'Supermercato', color: '#1F9D55', tint: '#E3F6EA', icon: 'M3 4h2l2.4 11h10.2l2-8H6.2M9 20h.01M17 20h.01' },
+  supermercato: { name: 'Spesa', color: '#1F9D55', tint: '#E3F6EA', icon: 'M3 4h2l2.4 11h10.2l2-8H6.2M9 20h.01M17 20h.01' },
   cibo: { name: 'Cibo fuori', color: '#D9650A', tint: '#FDEEDC', icon: 'M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2.5 2.5-2.5 7 0 9v9' },
   divertimento: { name: 'Divertimento', color: '#7C4DDB', tint: '#EFE8FC', icon: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z' },
   casa: { name: 'Casa e bollette', color: '#2B6BE0', tint: '#E3EDFD', icon: 'M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-5h4v5' },
