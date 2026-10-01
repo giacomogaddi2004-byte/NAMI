@@ -6,7 +6,9 @@ import { decryptJson, encryptJson } from '../lib/crypto'
 import { TAX_PERCENT, taxShare } from '../lib/money'
 import { errorMessage, supabase } from '../lib/supabase'
 import { db, PRIMARY_KEY, rowKey, TABLES, type OutboxItem, type Row, type TableName } from './db'
-import type { Account, PersonKey, PiggyBank, PiggyMove, Recurrence, Rule, Settings, Tx } from './model'
+import type { Account, Budget, PersonKey, PiggyBank, PiggyMove, Recurrence, Rule, Settings, Tx } from './model'
+import type { CategoryKey } from './categories'
+import { stableId } from '../lib/ids'
 import { piggyShares, settlements } from '../lib/piggy'
 import { today } from '../lib/dates'
 import { dueDates, occurrenceId, occurrenceKey } from '../lib/recurrences'
@@ -35,6 +37,8 @@ interface Data {
   occurrences: Set<string>
   piggyBanks: PiggyBank[]
   piggyMoves: PiggyMove[]
+  /** Budget mensili attivi (uno per categoria). */
+  budgets: Budget[]
   saveSettings: (settings: Settings) => Promise<void>
   saveAccounts: (accounts: Account[]) => Promise<void>
   /** Salva un movimento; per le entrate con fattura aggiorna anche il giroconto verso il conto tasse. */
@@ -52,6 +56,8 @@ interface Data {
   deletePiggy: (piggy: PiggyBank) => Promise<void>
   saveMove: (move: PiggyMove) => Promise<void>
   deleteMove: (move: PiggyMove) => Promise<void>
+  /** Imposta i budget: una categoria senza limite (o a zero) perde il suo budget. */
+  setBudgets: (limits: Partial<Record<CategoryKey, number>>) => Promise<void>
   /** Registra l'acquisto, libera i soldi del salvadanaio e lo segna come ottenuto, tutto insieme. */
   completePiggy: (piggy: PiggyBank, purchase: Tx) => Promise<void>
   syncNow: () => void
@@ -61,6 +67,7 @@ const Ctx = createContext<Data | null>(null)
 
 type AccountPayload = Omit<Account, 'id'>
 type RulePayload = Omit<Rule, 'id'>
+type BudgetPayload = Omit<Budget, 'id'>
 type PiggyPayload = Omit<PiggyBank, 'id'>
 type MovePayload = Omit<PiggyMove, 'id' | 'piggyId' | 'accountId' | 'date' | 'createdBy'>
 type RecurrencePayload = Omit<Recurrence, 'id' | 'accountId' | 'day'>
@@ -80,6 +87,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [occurrences, setOccurrences] = useState<Set<string>>(new Set())
   const [piggyBanks, setPiggyBanks] = useState<PiggyBank[]>([])
   const [piggyMoves, setPiggyMoves] = useState<PiggyMove[]>([])
+  const [budgets, setBudgetList] = useState<Budget[]>([])
   const generating = useRef(false)
   const running = useRef(false)
   const again = useRef(false)
@@ -95,13 +103,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return null
       }
     }
-    const [accountRows, txRows, ruleRows, recurrenceRows, piggyRows, moveRows, settingsRow] = await Promise.all([
+    const [accountRows, txRows, ruleRows, recurrenceRows, piggyRows, moveRows, budgetRows, settingsRow] = await Promise.all([
       db.accounts.toArray(),
       db.transactions.toArray(),
       db.rules.toArray(),
       db.recurrences.toArray(),
       db.piggy_banks.toArray(),
       db.piggy_moves.toArray(),
+      db.budgets.toArray(),
       db.settings.get(householdId),
     ])
 
@@ -150,6 +159,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const p = row.deleted_at ? null : await open<MovePayload>('piggy_moves', row)
       if (p) nextMoves.push({ ...p, id: row.id!, piggyId: row.piggy_bank_id!, accountId: row.account_id!, date: row.date!, createdBy: row.created_by })
     }
+    const nextBudgets: Budget[] = []
+    for (const row of budgetRows) {
+      const p = row.deleted_at ? null : await open<BudgetPayload>('budgets', row)
+      if (p) nextBudgets.push({ ...p, id: row.id! })
+    }
+    setBudgetList(nextBudgets)
     setPiggyBanks(nextPiggies.sort((a, b) => a.order - b.order))
     setPiggyMoves(nextMoves.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)))
     setAccounts(nextAccounts.sort((a, b) => a.order - b.order))
@@ -228,7 +243,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   /** Scrive in locale, mette in coda e prova subito a inviare. */
   const write = useCallback(
     async (items: OutboxItem[]) => {
-      await db.transaction('rw', [db.accounts, db.transactions, db.settings, db.rules, db.recurrences, db.piggy_banks, db.piggy_moves, db.outbox], async () => {
+      await db.transaction('rw', [db.accounts, db.transactions, db.settings, db.rules, db.recurrences, db.piggy_banks, db.piggy_moves, db.budgets, db.outbox], async () => {
         for (const item of items) {
           await db.table<Row, string>(item.table).put(item.row)
           await db.outbox.add(item)
@@ -355,6 +370,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [seal],
   )
 
+  const setBudgets = useCallback(
+    async (limits: Partial<Record<CategoryKey, number>>) => {
+      const items: OutboxItem[] = []
+      for (const [category, limit] of Object.entries(limits) as [CategoryKey, number | undefined][]) {
+        const id = await stableId(`budget:${category}`)
+        const current = budgets.find((b) => b.category === category)
+        if (limit && limit > 0) {
+          if (current?.limit !== limit) items.push(await seal('budgets', id, { category, limit } satisfies BudgetPayload))
+        } else if (current) {
+          items.push(await seal('budgets', id, { category, limit: current.limit } satisfies BudgetPayload, { deleted_at: new Date().toISOString() }))
+        }
+      }
+      if (items.length > 0) await write(items)
+    },
+    [budgets, seal, write],
+  )
+
   const savePiggy = useCallback(async (piggy: PiggyBank) => write([await sealPiggy(piggy)]), [sealPiggy, write])
 
   const deletePiggy = useCallback(
@@ -445,8 +477,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const me = (user && settings?.people[user.id]) || null
   const value = useMemo<Data>(
-    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, completePiggy, syncNow: sync }),
-    [loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, completePiggy, sync],
+    () => ({ loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, budgets, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, setBudgets, completePiggy, syncNow: sync }),
+    [loaded, synced, syncError, pending, me, settings, accounts, txs, rules, recurrences, occurrences, piggyBanks, piggyMoves, budgets, saveSettings, saveAccounts, saveTx, deleteTx, saveTxs, saveRule, deleteRule, saveRecurrences, deleteRecurrence, savePiggy, deletePiggy, saveMove, deleteMove, setBudgets, completePiggy, sync],
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

@@ -10,6 +10,7 @@ import { availableBalance, computeShares, inView, monthSummary, savingsTotal, ta
 import { longDay, monthName, shortDay, today } from '../lib/dates'
 import { formatEur, formatEurRounded } from '../lib/money'
 import { piggyAmount } from '../lib/piggy'
+import { budgetTotal, level, spentByCategory } from '../lib/budget'
 import { useView } from '../lib/view'
 
 const VIEWS = [['jack', PEOPLE.jack.name], ['fiore', PEOPLE.fiore.name], ['coppia', 'Coppia']] as const
@@ -20,7 +21,7 @@ const C = 2 * Math.PI * R
 const LEGEND_TOP = 5
 
 export function Home() {
-  const { accounts, txs, piggyMoves, pending } = useData()
+  const { accounts, txs, piggyMoves, budgets, pending } = useData()
   const [view, setView] = useView()
   const day = today()
 
@@ -44,6 +45,15 @@ export function Home() {
   const others = month.byCategory.slice(LEGEND_TOP)
   const legend = month.byCategory.slice(0, LEGEND_TOP).map(([cat, cents]) => ({ name: CAT[cat].name, color: CAT[cat].color, cents }))
   if (others.length > 0) legend.push({ name: `Altre ${others.length}`, color: '#B8BDCC', cents: others.reduce((a, [, c]) => a + c, 0) })
+
+  // Budget: sono della coppia, quindi la percentuale ha senso solo guardando la coppia.
+  const coupleSpent = spentByCategory(txs, day.slice(0, 7), byId)
+  const budgetLimit = budgetTotal(budgets)
+  const budgetPct = budgetLimit > 0 ? Math.round((month.spent / budgetLimit) * 100) : 0
+  const alerts = budgets
+    .map((b) => ({ b, spent: coupleSpent.get(b.category) ?? 0 }))
+    .filter(({ b, spent }) => level(spent, b.limit) !== 'ok')
+    .sort((a, c) => c.spent / c.b.limit - a.spent / a.b.limit)
 
   const latest = txs.filter((tx) => inView(tx, byId, view)).slice(0, 5)
 
@@ -77,6 +87,20 @@ export function Home() {
 
       <Segmented options={VIEWS} value={view} onChange={setView} />
 
+      {alerts.length > 0 && (
+        <Link
+          to="/statistiche"
+          style={{ background: '#FFF7E8', border: '1px solid #F3DDB0', borderRadius: 18, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, color: '#6B4A12' }}
+        >
+          {alerts.slice(0, 3).map(({ b, spent }) => (
+            <div key={b.id} style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.35 }}>
+              {CAT[b.category].name}: {level(spent, b.limit) === 'over' ? (spent === b.limit ? 'budget raggiunto' : `oltre il budget di ${formatEur(spent - b.limit)}`) : `all’${Math.round((spent / b.limit) * 100)}% del budget`}
+            </div>
+          ))}
+          {alerts.length > 3 && <div style={{ fontSize: 13 }}>e altre {alerts.length - 3}</div>}
+        </Link>
+      )}
+
       <Link
         to={`/saldo/${view}`}
         aria-label="Saldo disponibile: vedi i conti che lo compongono"
@@ -104,7 +128,18 @@ export function Home() {
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="label">Speso a {monthName(day)}</div>
           <div className="num" style={{ fontSize: 25, fontWeight: 700, whiteSpace: 'nowrap' }}>{formatEur(month.spent)}</div>
-          <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>Entrate {formatEur(month.income)}</div>
+          {view === 'coppia' && budgetLimit > 0 ? (
+            <>
+              <div className="bar" style={{ height: 8 }}>
+                <div style={{ width: `${Math.min(budgetPct, 100)}%`, background: budgetPct >= 100 ? 'var(--over)' : budgetPct >= 80 ? 'var(--warning)' : 'var(--plus)' }} />
+              </div>
+              <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>
+                {budgetPct}% di {formatEurRounded(budgetLimit)} di budget
+              </div>
+            </>
+          ) : (
+            <div className="muted" style={{ fontSize: 12, lineHeight: 1.45 }}>Entrate {formatEur(month.income)}</div>
+          )}
         </div>
         <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="label">Totale risparmi</div>

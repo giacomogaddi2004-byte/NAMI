@@ -7,6 +7,7 @@ import { Icon, ICONS } from '../components/Icon'
 import { OWNER_LABEL, PEOPLE } from '../data/model'
 import { useData } from '../data/store'
 import { computeShares } from '../lib/balances'
+import { budgetTotal } from '../lib/budget'
 import { formatEur } from '../lib/money'
 
 const avatar = { width: 44, height: 44, borderRadius: 22, color: '#fff', fontWeight: 700, border: '3px solid #fff' } as const
@@ -122,7 +123,7 @@ function NotificationsRow() {
 
 export function Impostazioni() {
   const { user, signOut } = useSession()
-  const { accounts, txs, rules, recurrences, me, pending, syncError, syncNow } = useData()
+  const { accounts, txs, rules, recurrences, budgets, me, pending, syncError, syncNow } = useData()
   const shares = computeShares(accounts, txs)
   const exit = () => {
     const warning = pending > 0 ? `Ci sono ${pending} modifiche non ancora inviate: uscendo andranno perse. ` : ''
@@ -172,8 +173,8 @@ export function Impostazioni() {
           <RowText title="Categorie e regole" sub={`${rules.length} ${rules.length === 1 ? 'regola vostra' : 'regole vostre'} · esercente → categoria`} />
           {chevron}
         </Link>
-        <Link to="/statistiche" className="list-row">
-          <RowText title="Budget mensili" sub="Avvisi all'80% e al 100%" />
+        <Link to="/budget" className="list-row">
+          <RowText title="Budget mensili" sub={budgets.length > 0 ? `${budgets.length} categorie · ${formatEur(budgetTotal(budgets))} al mese` : 'Avvisi all’80% e al 100%'} />
           {chevron}
         </Link>
         <button type="button" className="list-row">
@@ -217,7 +218,7 @@ export function Impostazioni() {
       </Section>
 
       <div className="muted" style={{ textAlign: 'center', fontSize: 12 }}>
-        NAMI {__APP_VERSION__} · Statistiche è ancora di esempio
+        NAMI {__APP_VERSION__}
       </div>
     </div>
   )

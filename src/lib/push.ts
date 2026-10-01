@@ -52,7 +52,10 @@ export async function disablePush(): Promise<void> {
   await sub.unsubscribe()
 }
 
-/** Mostra subito una notifica su questo dispositivo, senza passare dal server. */
-export async function showLocalTest(): Promise<void> {
-  await (await registration()).showNotification('NAMI', { body: 'Così appariranno gli avvisi delle spese fisse.', icon: 'icon-192.png' })
+/** Mostra subito una notifica su questo dispositivo, senza passare dal server. Non fa nulla se il permesso non c'è. */
+export async function showLocal(title: string, body: string, url = './#/statistiche'): Promise<void> {
+  if (!pushSupported() || Notification.permission !== 'granted') return
+  await (await registration()).showNotification(title, { body, icon: 'icon-192.png', data: { url } })
 }
+
+export const showLocalTest = () => showLocal('NAMI', 'Così appariranno gli avvisi delle spese fisse.', './#/spese-fisse')

@@ -1,7 +1,7 @@
 // Copia locale dei dati (sempre cifrata) e coda delle modifiche da inviare.
 import Dexie, { type Table } from 'dexie'
 
-export type TableName = 'accounts' | 'transactions' | 'settings' | 'rules' | 'recurrences' | 'piggy_banks' | 'piggy_moves'
+export type TableName = 'accounts' | 'transactions' | 'settings' | 'rules' | 'recurrences' | 'piggy_banks' | 'piggy_moves' | 'budgets'
 
 /** Una riga così come sta sul server: il contenuto vero è in `payload`, cifrato. */
 export interface Row {
@@ -38,6 +38,7 @@ export const PRIMARY_KEY: Record<TableName, 'id' | 'household_id'> = {
   recurrences: 'id',
   piggy_banks: 'id',
   piggy_moves: 'id',
+  budgets: 'id',
 }
 export const TABLES = Object.keys(PRIMARY_KEY) as TableName[]
 
@@ -51,6 +52,7 @@ export const db = new Dexie('nami-data') as Dexie & {
   recurrences: Table<Row, string>
   piggy_banks: Table<Row, string>
   piggy_moves: Table<Row, string>
+  budgets: Table<Row, string>
   outbox: Table<OutboxItem, number>
   meta: Table<{ key: string; value: string }, string>
 }
@@ -65,8 +67,9 @@ db.version(1).stores({
 db.version(2).stores({ rules: 'id' })
 db.version(3).stores({ recurrences: 'id' })
 db.version(4).stores({ piggy_banks: 'id', piggy_moves: 'id' })
+db.version(5).stores({ budgets: 'id' })
 
 /** Cancella la copia locale (all'uscita dall'account). */
 export async function clearLocalData(): Promise<void> {
-  await Promise.all([db.accounts.clear(), db.transactions.clear(), db.settings.clear(), db.rules.clear(), db.recurrences.clear(), db.piggy_banks.clear(), db.piggy_moves.clear(), db.outbox.clear(), db.meta.clear()])
+  await Promise.all([db.accounts.clear(), db.transactions.clear(), db.settings.clear(), db.rules.clear(), db.recurrences.clear(), db.piggy_banks.clear(), db.piggy_moves.clear(), db.budgets.clear(), db.outbox.clear(), db.meta.clear()])
 }

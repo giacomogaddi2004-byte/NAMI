@@ -10,6 +10,8 @@ import { isSplit } from '../lib/balances'
 import { today } from '../lib/dates'
 import { formatEur, parseEur, TAX_PERCENT, taxShare } from '../lib/money'
 import { piggyShares, settlements } from '../lib/piggy'
+import { crossed } from '../lib/budget'
+import { showLocal } from '../lib/push'
 import { categoryFor, normalizeMerchant, sameMerchant } from '../lib/rules'
 
 const TYPES = [['uscita', 'Uscita'], ['entrata', 'Entrata'], ['giroconto', 'Giroconto']] as const
@@ -58,7 +60,7 @@ export function Aggiungi() {
 
 function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
   const navigate = useNavigate()
-  const { accounts, txs, rules, me, piggyMoves, saveTx, deleteTx, saveTxs, saveRule, completePiggy } = useData()
+  const { accounts, txs, rules, budgets, me, piggyMoves, saveTx, deleteTx, saveTxs, saveRule, completePiggy } = useData()
   const mine = accounts.find((a) => a.owner === me) ?? accounts[0]
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'uscita')
@@ -133,7 +135,24 @@ function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
     if (piggy && type === 'uscita') await completePiggy(piggy, tx)
     else await saveTx(tx)
     await learnRule(id)
+    void warnBudget(tx)
     navigate(-1)
+  }
+
+  /** Se questa spesa porta una categoria all'80% o al 100% del budget, avvisa su questo telefono. */
+  const warnBudget = async (saved: Tx) => {
+    const budget = budgets.find((b) => b.category === saved.category)
+    if (saved.type !== 'uscita' || !budget || saved.date.slice(0, 7) !== today().slice(0, 7)) return
+    const before = txs
+      .filter((t) => t.id !== saved.id && t.type === 'uscita' && t.category === saved.category && t.date.slice(0, 7) === saved.date.slice(0, 7))
+      .reduce((sum, t) => sum + t.cents, 0)
+    const hit = crossed(before, before + saved.cents, budget.limit)
+    if (!hit) return
+    const name = CAT[budget.category].name
+    await showLocal(
+      `Budget ${name}`,
+      hit === 'over' ? `Hai superato il budget di ${formatEur(before + saved.cents - budget.limit)}.` : 'Sei oltre l’80% del budget del mese.',
+    ).catch(() => {})
   }
 
   /** Categoria cambiata a mano per un esercente: propone di ricordarla e di correggere il passato. */

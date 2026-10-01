@@ -81,6 +81,15 @@ export interface Rule {
   category: CategoryKey
 }
 
+/** Budget mensile di una categoria di spesa, comune alla coppia. */
+export interface Budget {
+  /** Id stabile ricavato dalla categoria: un solo budget per categoria, anche se due telefoni lo creano insieme. */
+  id: string
+  category: CategoryKey
+  /** Limite mensile in centesimi. */
+  limit: number
+}
+
 /** Salvadanaio virtuale di coppia: i soldi restano sul conto ma escono dal saldo disponibile. */
 export interface PiggyBank {
   id: string
