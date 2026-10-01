@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { PiggyMove } from '../data/model'
-import { pace, piggyAmount, piggyShares } from './piggy'
+import type { Account, PiggyMove } from '../data/model'
+import { pace, piggyAmount, piggyShares, settlements } from './piggy'
 
 let n = 0
 const move = (m: Partial<PiggyMove> & Pick<PiggyMove, 'type' | 'cents' | 'who'>): PiggyMove => ({
@@ -26,6 +26,31 @@ describe('soldi nei salvadanai', () => {
     expect(piggyAmount(moves, 'jack')).toBe(45000)
     expect(piggyAmount(moves, 'fiore')).toBe(30000)
     expect(piggyAmount([], 'coppia')).toBe(0)
+  })
+})
+
+describe('pareggio quando si ottiene l’obiettivo', () => {
+  const acc = (id: string, owner: Account['owner'], kind: Account['kind'] = 'corrente'): Account => ({
+    id, name: id, kind, owner, opening: { jack: 0, fiore: 0 }, order: 0,
+  })
+  const accounts = [acc('jack-cc', 'jack'), acc('jack-coppia', 'jack'), acc('fiore-cc', 'fiore'), acc('contanti', 'entrambi', 'contanti')]
+  const shares = { jack: 150000, fiore: 100000 }
+
+  it('chi non paga gira la sua quota al conto da cui si paga', () => {
+    expect(settlements(accounts, shares, 'jack', 'jack-cc')).toEqual([{ who: 'fiore', cents: 100000, fromAccountId: 'fiore-cc' }])
+    expect(settlements(accounts, shares, 'fiore', 'fiore-cc')).toEqual([{ who: 'jack', cents: 150000, fromAccountId: 'jack-cc' }])
+  })
+
+  it('vale anche pagando da un altro conto di chi paga o dai contanti', () => {
+    expect(settlements(accounts, shares, 'jack', 'jack-coppia')).toHaveLength(1)
+    expect(settlements(accounts, shares, 'jack', 'contanti')).toHaveLength(1)
+  })
+
+  it('niente giroconto se chi non paga non ha messo nulla, o se paga già dal suo conto', () => {
+    expect(settlements(accounts, { jack: 100000, fiore: 0 }, 'jack', 'jack-cc')).toEqual([])
+    // Se l'acquisto esce già dal conto di chi dovrebbe girare, non c'è nulla da spostare.
+    expect(settlements(accounts, shares, 'jack', 'fiore-cc')).toEqual([])
+    expect(settlements(accounts.filter((a) => a.id !== 'fiore-cc'), shares, 'jack', 'jack-cc')).toEqual([])
   })
 })
 

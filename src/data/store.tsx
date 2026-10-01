@@ -7,7 +7,7 @@ import { TAX_PERCENT, taxShare } from '../lib/money'
 import { errorMessage, supabase } from '../lib/supabase'
 import { db, PRIMARY_KEY, rowKey, TABLES, type OutboxItem, type Row, type TableName } from './db'
 import type { Account, PersonKey, PiggyBank, PiggyMove, Recurrence, Rule, Settings, Tx } from './model'
-import { piggyShares } from '../lib/piggy'
+import { piggyShares, settlements } from '../lib/piggy'
 import { today } from '../lib/dates'
 import { dueDates, occurrenceId, occurrenceKey } from '../lib/recurrences'
 
@@ -385,13 +385,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
           who,
           note: 'Ottenuto',
         }))
+      // Chi non ha pagato gira la sua parte a chi ha pagato: un giroconto dal suo conto corrente.
+      const transfers: Tx[] = settlements(accounts, shares, purchase.who, purchase.accountId).map((s) => ({
+        id: crypto.randomUUID(),
+        type: 'giroconto',
+        cents: s.cents,
+        date: purchase.date,
+        accountId: s.fromAccountId,
+        toAccountId: purchase.accountId,
+        merchant: `Pareggio ${piggy.name}`,
+        who: s.who,
+        toWho: purchase.who,
+      }))
       await write([
         await sealTx(purchase),
+        ...(await Promise.all(transfers.map((t) => sealTx(t)))),
         ...(await Promise.all(releases.map((m) => sealMove(m)))),
         await sealPiggy({ ...piggy, achieved: purchase.date }),
       ])
     },
-    [piggyMoves, sealMove, sealPiggy, sealTx, write],
+    [accounts, piggyMoves, sealMove, sealPiggy, sealTx, write],
   )
 
   // Spese fisse: alla prima apertura dal giorno di scadenza in poi crea i movimenti mancanti.

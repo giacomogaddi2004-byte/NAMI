@@ -9,6 +9,7 @@ import { useData } from '../data/store'
 import { isSplit } from '../lib/balances'
 import { today } from '../lib/dates'
 import { formatEur, parseEur, TAX_PERCENT, taxShare } from '../lib/money'
+import { piggyShares, settlements } from '../lib/piggy'
 import { categoryFor, normalizeMerchant, sameMerchant } from '../lib/rules'
 
 const TYPES = [['uscita', 'Uscita'], ['entrata', 'Entrata'], ['giroconto', 'Giroconto']] as const
@@ -57,7 +58,7 @@ export function Aggiungi() {
 
 function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
   const navigate = useNavigate()
-  const { accounts, txs, rules, me, saveTx, deleteTx, saveTxs, saveRule, completePiggy } = useData()
+  const { accounts, txs, rules, me, piggyMoves, saveTx, deleteTx, saveTxs, saveRule, completePiggy } = useData()
   const mine = accounts.find((a) => a.owner === me) ?? accounts[0]
 
   const [type, setType] = useState<TxType>(existing?.type ?? 'uscita')
@@ -99,6 +100,10 @@ function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
   const to = accounts.find((a) => a.id === toAccountId)
   const fromSplit = !!from && isSplit(from)
   const toSplit = isTransfer && !!to && isSplit(to)
+
+  // Acquisto con i soldi del salvadanaio: chi non paga gira la sua parte a chi paga.
+  const payer: PersonKey = fromSplit || !from ? who : (from.owner as PersonKey)
+  const transfers = piggy && type === 'uscita' ? settlements(accounts, piggyShares(piggyMoves, piggy.id), payer, accountId) : []
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -168,6 +173,11 @@ function TxForm({ existing, piggy }: { existing?: Tx; piggy?: PiggyBank }) {
       {piggy ? (
         <div className="notice notice--ok">
           Acquisto per <b>{piggy.name}</b>. Scegli l'esercente: al salvataggio i soldi messi da parte tornano disponibili e il salvadanaio risulta ottenuto.
+          {transfers.map((t) => (
+            <div key={t.who} style={{ marginTop: 6 }}>
+              Pareggio automatico: {formatEur(t.cents)} dal conto di {PEOPLE[t.who].name} a {from?.name ?? 'questo conto'}.
+            </div>
+          ))}
         </div>
       ) : (
         <Segmented options={TYPES} value={type} onChange={setType} />

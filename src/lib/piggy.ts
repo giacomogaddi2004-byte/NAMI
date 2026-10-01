@@ -1,5 +1,5 @@
 // Salvadanai virtuali: i soldi restano sul conto ma escono dal saldo disponibile.
-import { PERSON_KEYS, type PersonKey, type PiggyMove, type View } from '../data/model'
+import { PERSON_KEYS, type Account, type PersonKey, type PiggyMove, type View } from '../data/model'
 import { nextMonth } from './recurrences'
 
 /** Versamento = soldi che entrano nel salvadanaio, prelievo = che escono. */
@@ -16,6 +16,30 @@ export function piggyShares(moves: PiggyMove[], piggyId?: string): Record<Person
 export function piggyAmount(moves: PiggyMove[], view: View): number {
   const shares = piggyShares(moves)
   return view === 'coppia' ? shares.jack + shares.fiore : shares[view]
+}
+
+/** Giroconto di pareggio: chi non paga gira la sua parte al conto da cui si paga. */
+export interface Settlement {
+  who: PersonKey
+  cents: number
+  fromAccountId: string
+}
+
+/**
+ * Quando si compra con i soldi del salvadanaio, l'acquisto esce da un solo conto.
+ * Chi non paga gira la quota che aveva messo dal proprio conto corrente a quello di chi paga,
+ * così nessuno resta in vantaggio o in svantaggio.
+ */
+export function settlements(
+  accounts: Account[],
+  shares: Record<PersonKey, number>,
+  payer: PersonKey,
+  purchaseAccountId: string,
+): Settlement[] {
+  return PERSON_KEYS.filter((who) => who !== payer && shares[who] > 0).flatMap((who) => {
+    const from = accounts.find((a) => a.kind === 'corrente' && a.owner === who)
+    return from && from.id !== purchaseAccountId ? [{ who, cents: shares[who], fromAccountId: from.id }] : []
+  })
 }
 
 export type Pace =
